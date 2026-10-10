@@ -1,0 +1,17 @@
+name: 使用提问
+description: 询问安装、Agent 调用或字幕操作
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: 使用方式与版本
+      placeholder: 例如 Windows + Codex，幕准 0.7.0；或仅网页操作
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: 卡在哪一步？
+      description: 描述已经做过的操作和想完成的事情；上传内容会公开，请先删掉私人路径或密钥。
+    validations:
+      required: true
