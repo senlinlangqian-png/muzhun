@@ -58,7 +58,9 @@ class ReleaseReadinessTests(unittest.TestCase):
             python.touch()
             (root / "src/muzhun").mkdir(parents=True)
             with patch.dict(os.environ, {"MUZHUN_HOME": str(root)}):
-                self.assertEqual(launcher.find_runtime(), (python, root))
+                # Windows may spell the temp directory with an 8.3 alias;
+                # the launcher deliberately returns resolved absolute paths.
+                self.assertEqual(launcher.find_runtime(), (python.resolve(), root.resolve()))
 
     def test_reserved_port_is_not_reused_and_selected_port_stays_bound(self):
         with socket.socket() as occupied:
