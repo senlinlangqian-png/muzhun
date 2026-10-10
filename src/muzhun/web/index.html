@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>幕准 · 视频字幕</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="幕准首页">幕准<span>视频字幕</span></a>
+    <nav class="nav-actions" aria-label="工具帮助">
+      <button class="text-button" id="doctor-button">环境检查</button>
+      <a class="text-button" href="/lyrics">歌词 LRC</a>
+      <button class="text-button" id="skill-button">Agent Skill</button>
+      <button class="text-button" id="help-button">帮助</button>
+    </nav>
+  </header>
+  <main>
+    <section id="welcome" class="welcome">
+      <div class="welcome-heading"><h1>制作视频字幕</h1><p>核对专业术语，让字幕避开画面重点。</p></div>
+      <div class="upload-card">
+        <form id="upload-form">
+          <label class="dropzone" id="dropzone">
+            <input type="file" name="video" id="video-input" aria-label="选择视频" accept=".mp4,.mov,.mkv,.webm,.avi" required>
+            <svg class="upload-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 3v6h6M12 17v-5m-2 2 2-2 2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <strong id="file-label">选择视频，或拖到这里</strong>
+            <span>MP4、MOV 等 · 最大 250 MB / 10 分钟</span>
+          </label>
+          <div class="form-row">
+            <label>视频题材<select name="profile"><option value="auto">自动判断</option><option value="ai-code">AI / 编程教程</option><option value="cs2">CS2</option><option value="valorant">无畏契约</option><option value="general">通用内容</option></select></label>
+            <label>字幕样式<select name="style"><option value="professional">清晰</option><option value="gaming">加粗</option><option value="minimal">简洁</option></select></label>
+          </div>
+          <details class="advanced">
+            <summary>导入字幕与更多选项</summary>
+            <div class="advanced-body">
+              <label>已有字幕（.srt，可选）<input type="file" name="subtitle" accept=".srt"></label>
+              <label>术语表<textarea name="glossary" rows="3" placeholder="每行一个，例如：LoRA=罗拉|洛拉"></textarea></label>
+              <label>语音识别模型<select name="model"><option value="small">Small</option><option value="base">Base · 较快</option><option value="tiny">Tiny · 预览</option><option value="medium">Medium</option><option value="large-v3-turbo">Large v3 Turbo</option></select></label>
+              <p class="small-note">导入字幕会跳过语音识别。首次识别需下载模型。</p>
+            </div>
+          </details>
+          <button type="submit" class="primary full" id="start-button">开始处理</button>
+        </form>
+        <div class="demo-row"><span>合成示例</span><button class="text-button" id="demo-button">术语纠错</button><button class="text-button" id="moving-demo-button">字幕避让</button></div>
+      </div>
+    </section>
+    <section id="progress-panel" class="progress-panel hidden" aria-live="polite"><div><span class="spinner"></span><strong id="progress-title">正在处理</strong><span id="progress-percent">0%</span></div><div class="progress-track"><span id="progress-bar"></span></div><p id="progress-message"></p></section>
+    <section id="workspace" class="workspace hidden">
+      <div class="workspace-heading"><h1 id="job-title">字幕编辑</h1><div class="workspace-actions"><button id="undo-button" class="secondary" title="撤销上次保存，最多 30 步">撤销</button><button id="redo-button" class="secondary">重做</button><button id="new-button" class="secondary">新视频</button></div></div>
+      <div id="demo-warning" class="notice hidden">合成示例 · 字幕含预设错词</div>
+      <div class="overview"><div><span>题材</span><strong id="profile-label">—</strong></div><div><span>已纠词</span><strong id="correction-count">0</strong></div><div><span>关联画面</span><strong id="binding-count">0</strong></div><div><span>待确认</span><strong id="pending-count">0</strong></div></div>
+      <div class="editor-grid">
+        <div class="preview-column">
+          <div class="viewer-card">
+            <div class="viewer-toolbar"><div class="mode-switch" role="group" aria-label="字幕对比模式"><button data-mode="A" title="原始文字，下方固定">原始字幕</button><button data-mode="B" title="词表纠错与画面避让分别处理">常规处理</button><button data-mode="C" class="selected" title="用同时间画面核对术语和避让位置">画面联动</button></div><label class="toggle"><input id="show-regions" type="checkbox" checked>保护区</label></div>
+            <div class="stage" id="stage"><video id="video" playsinline preload="metadata"></video><div id="region-layer" class="region-layer"></div><div id="caption" class="caption"></div><div id="draw-box" class="draw-box hidden"></div><div class="stage-empty">加载视频</div></div>
+            <div class="player-controls"><button id="play-button" aria-label="播放或暂停">▶</button><span id="current-time">00:00</span><input type="range" id="seek" min="0" max="100" value="0" step="0.01" aria-label="视频进度"><span id="duration">00:00</span><button id="mute-button" aria-label="静音切换">声音</button></div>
+            <div class="viewer-footer"><span id="mode-description"></span><span id="mode-estimate" title="根据抽样画面估算，需人工复核"></span></div>
+          </div>
+          <div class="edit-tools"><button id="protect-button" class="secondary">框选保护区</button><button id="unpin-button" class="text-button">恢复位置</button><button id="clear-regions-button" class="text-button">清除保护区</button><span>可拖动字幕</span></div>
+          <div class="cue-card"><div class="card-heading"><h2>字幕</h2><span id="cue-total" class="badge"></span><button id="replace-open" class="text-button push">批量改词</button></div><div class="cue-search"><input id="cue-search" type="search" placeholder="搜索字幕或原文" aria-label="搜索字幕或原文"><select id="cue-filter" aria-label="筛选字幕"><option value="all">全部字幕</option><option value="unreviewed">未复核</option><option value="issues">纠词或遮挡待检查</option><option value="reviewed">已复核</option></select></div><div class="review-progress"><span id="review-progress">已复核 0 条</span><button id="next-review" class="text-button">下一条未复核 →</button></div><div id="cue-list" class="cue-list"></div></div>
+        </div>
+        <aside class="inspector">
+          <div class="inspector-section"><div class="card-heading"><h2>编辑字幕</h2><span id="selected-number" class="badge">—</span></div><label class="field-label">原文</label><p id="original-text" class="original-text"></p><label class="field-label" for="edited-text">字幕文字</label><textarea id="edited-text" rows="3"></textarea><div class="time-inputs"><label>开始（秒）<input id="edit-start" type="number" step="0.01" min="0"></label><label>结束（秒）<input id="edit-end" type="number" step="0.01" min="0"></label></div><div class="save-row"><button id="save-cue-button" class="secondary">保存修改</button><span id="draft-status" role="status">已保存</span></div><div class="review-actions"><button id="play-cue-button" class="secondary">试听本句</button><button id="mark-reviewed" class="secondary" title="听音并检查画面后，标记这条画面联动字幕已复核">标记已复核</button></div><div id="proposal-list" class="proposal-list"></div><details class="evidence-details"><summary>查看画面依据</summary><div id="evidence-panel"></div></details></div>
+          <details class="inspector-section layout-section"><summary>字幕位置</summary><label>避让方式<select id="position-policy"><option value="adaptive">随画面变化</option><option value="static">每句固定位置</option></select></label><p id="layout-note" class="small-note"></p><div id="layout-timeline" class="layout-timeline"></div></details>
+          <details class="inspector-section"><summary>样式与题材</summary><div class="form-row"><label>样式<select id="style-select"><option value="professional">清晰</option><option value="gaming">加粗</option><option value="minimal">简洁</option></select></label><label>字体<select id="font-select"><option value="sans">黑体</option><option value="bold">加粗黑体</option><option value="mono">等线</option></select></label></div><label class="range-label">字号 <output id="font-scale-label">1.0×</output><input id="font-scale" type="range" min="0.65" max="1.6" step="0.05" value="1"></label><label>视频题材<select id="profile-select"><option value="auto">自动判断</option><option value="ai-code">AI / 编程教程</option><option value="cs2">CS2</option><option value="valorant">无畏契约</option><option value="general">通用内容</option></select></label></details>
+          <div class="inspector-section export-section"><h2>导出</h2><button id="export-button" class="primary full">导出视频</button><button id="delivery-button" class="secondary full">视频与字幕包</button><div class="download-row"><a id="srt-link" download>文字字幕 SRT</a><a id="ass-link" download>位置字幕 ASS</a></div><a id="video-download" class="success-link hidden" download>下载视频</a><a id="review-link" class="small-link hidden" target="_blank" rel="noopener">复核页</a><details class="advanced"><summary>测试与处理信息</summary><div class="detail-links"><button id="blind-button" class="secondary full">生成匿名测试包</button><a id="blind-key" class="small-link hidden" download>下载测试对照表</a><button id="replan-button" class="text-button">重新排版</button><a id="report-link" download>处理记录</a><a id="annotation-link" download>评测标注模板</a><label class="annotation-upload">导入标注<input type="file" id="annotation-input" accept=".json"></label><pre id="evaluation-result" class="hidden"></pre><p id="source-note" class="small-note"></p><p class="small-note">题材依据：<span id="profile-evidence"></span></p></div></details></div>
+        </aside>
+      </div>
+    </section>
+    <details class="history-section" id="history-section"><summary>最近文件</summary><div id="history-list" class="history-list"><span class="empty-history">暂无记录</span></div></details>
+  </main>
+  <dialog id="help-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><h2>使用方法</h2><ol><li>选择视频，或先打开合成示例。</li><li>点击字幕，试听本句；采用纠词建议或保留原词。</li><li>保存修改，检查字幕位置后标记已复核。</li><li>重复术语用“批量改词”先预览，再应用；保存后可撤销。</li><li>导出视频，或下载可编辑字幕。</li></ol><details><summary>示例与自动判断</summary><p>合成示例含预设错词。题材按关键词判断，纠词参考画面文字，位置按抽样画面更新。复核状态由人标记；改动文字、时间或位置会取消对应记录。SRT 保留文字和时间，ASS 还保留位置。</p></details></dialog>
+  <dialog id="skill-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><h2>在 Agent 中使用</h2><p>先启动一次幕准。在项目文件夹运行安装命令：</p><pre>.\install-skill.ps1 -Agent deepseek</pre><p>DeepSeek Harness 输入 /muzhun-subtitles。Codex、Claude Code、Cursor 分别把 Agent 参数改成 codex、claude、cursor。Codex 使用 $muzhun-subtitles。</p><p>Agent 需要能读写本机文件并执行 Python。安装与朋友试用步骤见项目 docs/friend-test.md。</p></dialog>
+  <dialog id="doctor-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><h2>环境检查</h2><p id="doctor-summary" role="status">检查中…</p><div id="doctor-checks" class="doctor-checks"></div><p id="doctor-models"></p><button id="doctor-retry" class="secondary full">重新检查</button></dialog>
+  <dialog id="draft-dialog"><h2>这条字幕还未保存</h2><p>保存后再继续，或放弃本次输入。</p><div class="dialog-actions"><button id="draft-save" class="primary">保存并继续</button><button id="draft-discard" class="secondary">放弃修改</button><button id="draft-stay" class="text-button">继续编辑</button></div></dialog>
+  <dialog id="replace-dialog"><button class="dialog-close" data-close aria-label="关闭">×</button><h2>批量改词</h2><div class="form-row"><label>查找<input id="replace-find" type="text" maxlength="200" autocomplete="off"></label><label>替换成<input id="replace-with" type="text" maxlength="2000" autocomplete="off"></label></div><div class="replace-options"><label class="toggle"><input id="replace-whole" type="checkbox" checked>完整英文词</label><label class="toggle"><input id="replace-case" type="checkbox" checked>区分大小写</label><select id="replace-scope" aria-label="替换范围"><option value="all">全部字幕</option><option value="filtered">当前筛选</option><option value="current">当前一句</option></select></div><button id="replace-preview" class="secondary full">预览替换</button><p id="replace-summary" class="replace-summary" role="status">只修改字幕正文，保留原文。</p><div id="replace-list" class="replace-list"></div><button id="replace-apply" class="primary full" disabled>应用替换并重新排版</button></dialog>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

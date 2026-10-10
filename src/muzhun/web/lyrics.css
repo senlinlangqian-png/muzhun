@@ -1,0 +1,29 @@
+.lyrics-main { max-width: 1160px; }
+.lyrics-input { display: grid; gap: 10px; margin: 22px 0; }
+.file-text { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted, #737782); font-size: 13px; }
+.file-text input { max-width: 230px; }
+.lyrics-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.audio-card { border: 1px solid #e7e8ed; border-radius: 12px; padding: 24px; margin: 20px 0; background: #fff; }
+.audio-card audio { width: 100%; }
+#live-lyric { min-height: 34px; text-align: center; font-size: 22px; font-weight: 600; padding-top: 12px; }
+.lyrics-list { max-height: 530px; }
+.lyric-row { display: flex; width: 100%; align-items: start; gap: 14px; background: #fff; border: 0; border-top: 1px solid #eff0f3; padding: 16px; text-align: left; cursor: pointer; }
+.lyric-row.selected { background: #f1f4ff; box-shadow: inset 3px 0 #4561e8; }
+.lyric-row.playing .lyric-body strong { color: #344fcb; }
+.lyrics-tools { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: -6px 0 16px; }
+.lyrics-tools p { margin: 0; }
+.lyrics-realign { border: 1px solid #e7e8ed; border-radius: 10px; padding: 14px 18px; margin-bottom: 22px; background: #fff; }
+.lyrics-realign summary { cursor: pointer; font-size: 14px; font-weight: 500; }
+.lyrics-realign label { display: block; margin-top: 16px; }
+.lyrics-realign textarea { margin: 8px 0 4px; }
+#lyric-anchor { overflow-wrap: anywhere; }
+.lyric-row .lyric-body { flex: 1; min-width: 0; }
+.lyric-row strong { display: block; font-size: 14px; line-height: 1.7; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lyric-row small { display: block; color: #858a96; font-size: 12px; margin-top: 5px; }
+.lyric-tag { white-space: nowrap; font-size: 11px; background: #f5f6f9; color: #747b89; padding: 2px 5px; border-radius: 4px; }
+.lyric-tag.warn { color: #a15e23; background: #fff6e8; }
+.timing-actions { display: flex; gap: 12px; margin: 10px 0; }
+#lyrics-progress progress { width: 100%; margin-top: 20px; accent-color: #4561e8; }
+.lyrics-main a.full { display: block; text-align: center; text-decoration: none; box-sizing: border-box; }
+.lyrics-main a[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+@media(max-width: 800px) { .lyrics-editor-grid { grid-template-columns: 1fr; } .file-text { display: grid; } }

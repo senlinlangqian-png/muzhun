@@ -1,0 +1,62 @@
+{
+  "general": {
+    "label": "通用内容", "keywords": {}, "terms": [], "guards": []
+  },
+  "ai-code": {
+    "label": "AI / 编程教程",
+    "keywords": {"pytorch": 4, "lora": 4, "hugging face": 4, "cuda": 3, "rag": 3, "python": 3, "transformer": 3, "学习率": 2, "微调": 2, "神经网络": 3, "def ": 2, "import ": 2},
+    "terms": [
+      {"text": "LoRA", "aliases": ["罗拉", "洛拉", "漏拉", "lora"]},
+      {"text": "PyTorch", "aliases": ["派托奇", "派托尔奇", "pytorch", "py torch"]},
+      {"text": "CUDA", "aliases": ["库达", "酷达", "扣达", "cuda"]},
+      {"text": "RAG", "aliases": ["rag", "瑞格"]},
+      {"text": "Python", "aliases": ["python", "派森"]},
+      {"text": "Transformer", "aliases": ["transformer"]},
+      {"text": "Hugging Face", "aliases": ["huggingface", "hugging face"]},
+      {"text": "API", "aliases": ["api"]},
+      {"text": "GPU", "aliases": ["gpu"]},
+      {"text": "学习率", "aliases": ["学习绿"]}
+    ],
+    "guards": []
+  },
+  "cs2": {
+    "label": "CS2",
+    "keywords": {"counter-strike": 8, "counter strike": 8, "cs2": 8, "dust ii": 4, "dust2": 4, "mirage": 3, "inferno": 3, "awp": 2, "ak-47": 2, "m4a1-s": 3, "拆包": 2, "拆弹": 2, "闪光弹": 1},
+    "terms": [
+      {"text": "CS2", "aliases": ["cs 2", "cs2"]},
+      {"text": "AWP", "aliases": ["a w p", "awp"]},
+      {"text": "AK-47", "aliases": ["ak47", "ak 47", "ak四七"]},
+      {"text": "M4A1-S", "aliases": ["m4a1s", "m4a1 s"]},
+      {"text": "Dust II", "aliases": ["dust2", "dust ii"]},
+      {"text": "Mirage", "aliases": ["mirage"]},
+      {"text": "Inferno", "aliases": ["inferno"]}
+    ],
+    "guards": [
+      {"rect": [0.0, 0.0, 0.24, 0.34], "label": "小地图", "weight": 3},
+      {"rect": [0.32, 0.0, 0.70, 0.15], "label": "队伍 / 回合信息", "weight": 2},
+      {"rect": [0.35, 0.32, 0.65, 0.70], "label": "准星 / 主要交火区域", "weight": 5},
+      {"rect": [0.0, 0.86, 1.0, 1.0], "label": "血量 / 弹药信息", "weight": 3},
+      {"rect": [0.74, 0.0, 1.0, 0.30], "label": "击杀信息", "weight": 2}
+    ]
+  },
+  "valorant": {
+    "label": "无畏契约",
+    "keywords": {"valorant": 8, "无畏契约": 8, "捷风": 4, "赛奇": 4, "贤者": 3, "蝰蛇": 3, "奇乐": 3, "jett": 4, "sage": 2, "vandal": 3, "phantom": 2, "spike": 2, "终极技能": 1},
+    "terms": [
+      {"text": "无畏契约", "aliases": ["无畏气约"]},
+      {"text": "捷风", "aliases": ["捷峰", "杰风"]},
+      {"text": "赛奇", "aliases": ["赛琪"]},
+      {"text": "蝰蛇", "aliases": ["葵蛇"]},
+      {"text": "Jett", "aliases": ["jett"]},
+      {"text": "Vandal", "aliases": ["vandal"]},
+      {"text": "Phantom", "aliases": ["phantom"]},
+      {"text": "Spike", "aliases": ["spike"]}
+    ],
+    "guards": [
+      {"rect": [0.0, 0.0, 0.26, 0.34], "label": "小地图", "weight": 3},
+      {"rect": [0.26, 0.0, 0.75, 0.15], "label": "队伍 / 回合信息", "weight": 2},
+      {"rect": [0.34, 0.32, 0.66, 0.70], "label": "准星 / 主要交火区域", "weight": 5},
+      {"rect": [0.05, 0.85, 0.95, 1.0], "label": "血量 / 技能 / 弹药", "weight": 4}
+    ]
+  }
+}

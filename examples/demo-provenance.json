@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "voice": "Microsoft Huihui Desktop - Chinese (Simplified)",
+  "scripts": [
+    "make_demo.py",
+    "speak_demo.ps1"
+  ],
+  "controlled_errors": true,
+  "purpose": "流程验证，不是独立识别评测",
+  "duration": 24.562
+}

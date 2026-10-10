@@ -1,0 +1,4 @@
+interface:
+  display_name: "幕准字幕助手"
+  short_description: "核对游戏与专业术语、避让讲解区域；对齐音频歌词，交付 LRC 与视频字幕"
+  default_prompt: "使用 $muzhun-subtitles 处理视频字幕或音频歌词，保留原文、检查术语与时间，交付可编辑字幕；视频检查导出画面，歌词保留待试听状态供用户复核。"

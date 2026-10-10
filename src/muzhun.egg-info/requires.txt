@@ -1,0 +1,15 @@
+fastapi<1,>=0.115
+uvicorn<1,>=0.30
+python-multipart<1,>=0.0.20
+Pillow<13,>=11
+numpy<3,>=1.26
+imageio-ffmpeg<1,>=0.6
+av<20,>=14
+rapidocr-onnxruntime<2,>=1.4
+faster-whisper<2,>=1.2
+pypinyin<1,>=0.53
+opencc-python-reimplemented<0.2,>=0.1.7
+
+[dev]
+httpx<1,>=0.28
+PyYAML<7,>=6

@@ -1,0 +1,11 @@
+{
+  "synthetic": true,
+  "voice": "Microsoft Huihui Desktop - Chinese (Simplified)",
+  "controlled_errors": true,
+  "purpose": "变化布局的实际 OCR 与渲染验证，不是独立真实视频评测",
+  "truth_source": "generator-defined panel rectangles, not engine outputs",
+  "changes": [
+    4,
+    8
+  ]
+}

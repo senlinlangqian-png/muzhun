@@ -1,0 +1,2 @@
+[console_scripts]
+muzhun = muzhun.cli:main
