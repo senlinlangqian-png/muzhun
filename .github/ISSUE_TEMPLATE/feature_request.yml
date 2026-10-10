@@ -1,0 +1,17 @@
+name: 功能建议
+description: 说明哪个字幕处理步骤需要改进
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 你在什么场景需要它？
+      description: 比如游戏解说、专业教程或歌曲；目前哪一步最麻烦？
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 希望得到什么结果？
+      description: 给出一个具体的改进前后例子；可选附你愿意公开的截图。
+    validations:
+      required: true
