@@ -1,0 +1,129 @@
+{
+  "version": "0.3.0",
+  "provenance": "synthetic-controlled-moving-panels",
+  "transcription": "provided-srt with one intentionally wrong alias",
+  "truth_source": "generator-defined panel rectangles, not engine OCR or layout",
+  "ocr_frames": 12,
+  "ocr_boxes": 228,
+  "edited_cues": 0,
+  "adaptive_C": {
+    "term_recall": 1.0,
+    "terms_correct": 3,
+    "terms_total": 3,
+    "blocked_seconds": 0.0,
+    "labeled_seconds": 11.6,
+    "items": [
+      {
+        "start": 0.2,
+        "end": 4.0,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 0.0
+      },
+      {
+        "start": 4.0,
+        "end": 8.0,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 0.0
+      },
+      {
+        "start": 8.0,
+        "end": 11.8,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 0.0
+      }
+    ]
+  },
+  "fixed_C": {
+    "term_recall": 1.0,
+    "terms_correct": 3,
+    "terms_total": 3,
+    "blocked_seconds": 11.6,
+    "labeled_seconds": 11.6,
+    "items": [
+      {
+        "start": 0.2,
+        "end": 4.0,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 3.8
+      },
+      {
+        "start": 4.0,
+        "end": 8.0,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 4.0
+      },
+      {
+        "start": 8.0,
+        "end": 11.8,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 3.8
+      }
+    ]
+  },
+  "best_fixed_candidate_using_truth": {
+    "term_recall": 1.0,
+    "terms_correct": 3,
+    "terms_total": 3,
+    "blocked_seconds": 4.0,
+    "labeled_seconds": 11.6,
+    "items": [
+      {
+        "start": 0.2,
+        "end": 4.0,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 0.0
+      },
+      {
+        "start": 4.0,
+        "end": 8.0,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 4.0
+      },
+      {
+        "start": 8.0,
+        "end": 11.8,
+        "terms_correct": 1,
+        "terms_total": 1,
+        "blocked_seconds": 0.0
+      }
+    ]
+  },
+  "changes": [
+    {
+      "start": 0.2,
+      "end": 4.0,
+      "position": "下方"
+    },
+    {
+      "start": 4.0,
+      "end": 8.0,
+      "position": "上方"
+    },
+    {
+      "start": 8.0,
+      "end": 11.8,
+      "position": "下方"
+    }
+  ],
+  "fixed_video_verification": {
+    "dimensions_match": true,
+    "duration_delta_seconds": 0.028,
+    "has_audio": true,
+    "scope": "file-structure-only; visual-and-audio-review-required"
+  },
+  "adaptive_video_verification": {
+    "dimensions_match": true,
+    "duration_delta_seconds": 0.028,
+    "has_audio": true,
+    "scope": "file-structure-only; visual-and-audio-review-required"
+  },
+  "limitation": "One controlled synthetic fixture. Does not establish real game accuracy, global novelty or saved editing time."
+}
