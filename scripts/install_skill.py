@@ -60,6 +60,8 @@ def install(destination: Path, update: bool = False) -> Path:
 
 
 def main(argv=None) -> int:
+    from fonts import configure_console
+    configure_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agent", choices=list(AGENT_ROOTS), default="codex",
                         help="安装到对应 Agent 的用户技能目录；DeepSeek Harness 用 deepseek")
