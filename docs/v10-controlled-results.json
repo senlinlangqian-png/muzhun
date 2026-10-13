@@ -1,0 +1,147 @@
+{
+  "continuous-base": {
+    "version": "1.0.0",
+    "provenance": "original-synthetic-speech-repeated",
+    "duration": 662.0,
+    "asr": {
+      "engine": "faster-whisper",
+      "model": "base",
+      "language": "en",
+      "language_probability": 1.0,
+      "word_timing": true,
+      "vad_filter": true,
+      "beam_size": 5,
+      "temperature": 0,
+      "chunks": 27,
+      "cached_chunks": 0,
+      "chunk_seconds": 25,
+      "context_seconds": 2,
+      "screen_hotwords": [
+        "SRT",
+        "ASR"
+      ]
+    },
+    "cues": 120,
+    "last_start": 653.64,
+    "ocr_frames": 600,
+    "reused_ocr_frames": 584,
+    "seconds": 79.48,
+    "controlled_word_error": {
+      "reference_words": 961,
+      "hypothesis_words": 907,
+      "word_edits": 63,
+      "wer": 0.0656
+    },
+    "render_verification": {
+      "dimensions_match": true,
+      "duration_delta_seconds": 0.016,
+      "has_audio": true,
+      "scope": "file-structure-only; visual-and-audio-review-required"
+    },
+    "limitation": "Synthetic English speech; not a real-world accuracy estimate or singing benchmark."
+  },
+  "two-hour": {
+    "version": "1.0.0",
+    "provenance": "original-synthetic-speech-with-silence",
+    "duration": 7200.0,
+    "asr": {
+      "engine": "faster-whisper",
+      "model": "base",
+      "language": "en",
+      "language_probability": 1.0,
+      "word_timing": true,
+      "vad_filter": true,
+      "beam_size": 5,
+      "temperature": 0,
+      "chunks": 288,
+      "cached_chunks": 0,
+      "chunk_seconds": 25,
+      "context_seconds": 2,
+      "screen_hotwords": [
+        "SRT",
+        "ASR"
+      ]
+    },
+    "cues": 12,
+    "last_start": 7194.25,
+    "ocr_frames": 600,
+    "reused_ocr_frames": 595,
+    "seconds": 84.98,
+    "controlled_word_error": {
+      "reference_words": 93,
+      "hypothesis_words": 93,
+      "word_edits": 0,
+      "wer": 0.0
+    },
+    "render_verification": {
+      "dimensions_match": true,
+      "duration_delta_seconds": 0.0,
+      "has_audio": true,
+      "scope": "file-structure-only; visual-and-audio-review-required"
+    },
+    "limitation": "Synthetic English speech; not a real-world accuracy estimate or singing benchmark."
+  },
+  "scope": "Original synthetic development fixtures; no independent accuracy or speed claim.",
+  "continuous-small": {
+    "version": "1.0.0",
+    "provenance": "original-synthetic-speech-repeated",
+    "duration": 662.0,
+    "asr": {
+      "engine": "faster-whisper",
+      "model": "small",
+      "language": "en",
+      "language_probability": 1.0,
+      "word_timing": true,
+      "vad_filter": true,
+      "beam_size": 5,
+      "temperature": 0,
+      "chunks": 27,
+      "cached_chunks": 0,
+      "chunk_seconds": 25,
+      "context_seconds": 2,
+      "screen_hotwords": [
+        "SRT",
+        "ASR"
+      ]
+    },
+    "cues": 126,
+    "last_start": 653.8,
+    "ocr_frames": 600,
+    "reused_ocr_frames": 584,
+    "seconds": 185.77,
+    "controlled_word_error": {
+      "reference_words": 961,
+      "hypothesis_words": 969,
+      "word_edits": 8,
+      "wer": 0.0083
+    },
+    "render_verification": {
+      "dimensions_match": true,
+      "duration_delta_seconds": 0.016,
+      "has_audio": true,
+      "scope": "file-structure-only; visual-and-audio-review-required"
+    },
+    "limitation": "Synthetic English speech; not a real-world accuracy estimate or singing benchmark."
+  },
+  "installation": {
+    "scope": "fresh-source-folder-on-same-Windows-machine",
+    "version": "1.0.0",
+    "ready": true,
+    "models_cached": [],
+    "second_start_reinstalls": false,
+    "unified_setup": true,
+    "skill_agent": "deepseek",
+    "skill_delivery": true,
+    "lyrics_export": true,
+    "lyrics_bytes": 66,
+    "video_bytes": 281638
+  },
+  "browser": {
+    "waveform_seek": true,
+    "split_merge_undo": true,
+    "lrc_download_bytes_match": true,
+    "delivery_zip_download_bytes_match": true,
+    "console_errors_observed": false,
+    "scope": "original synthetic demos only; no human review labels claimed"
+  }
+}

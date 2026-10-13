@@ -38,18 +38,18 @@ function renderLayout(){
   $("layout-timeline").innerHTML=segments.map((p,i)=>'<button class="layout-step" data-segment="'+i+'"><span>'+p.start.toFixed(2)+'–'+p.end.toFixed(2)+' 秒 · '+escapeHTML(p.label)+'</span>'+(p.needs_review?'<small>需复核</small>':'')+'</button>').join("");
   $("layout-timeline").querySelectorAll("[data-segment]").forEach(button=>button.addEventListener("click",()=>{const p=segments[Number(button.dataset.segment)];video.pause();video.currentTime=p.start+Math.min(.03,(p.end-p.start)/2);paint();}));
 }
-function filteredCues(){const search=$("cue-search").value.trim().toLocaleLowerCase(),filter=$("cue-filter").value;return result?.cues.filter(c=>(!search||(c.text+" "+c.original).toLocaleLowerCase().includes(search))&&(filter==="all"||filter==="unreviewed"&&!c.reviewed||filter==="reviewed"&&c.reviewed||filter==="issues"&&(c.pending||c.layout_review)))||[];}
+function filteredCues(){const search=$("cue-search").value.trim().toLocaleLowerCase(),filter=$("cue-filter").value;return result?.cues.filter(c=>(!search||(c.text+" "+c.original).toLocaleLowerCase().includes(search))&&(filter==="all"||filter==="unreviewed"&&!c.reviewed||filter==="reviewed"&&c.reviewed||filter==="issues"&&(c.pending||c.layout_review||c.recognition_review&&!c.reviewed)))||[];}
 function renderCueList(){
   if(!result)return;
   const cues=filteredCues();
   $("cue-total").textContent=cues.length===result.cues.length?cues.length+" 条":cues.length+" / "+result.cues.length+" 条";
   $("review-progress").textContent="已复核 "+result.cues.filter(c=>c.reviewed).length+" / "+result.cues.length+" 条";
-  $("cue-list").innerHTML=cues.length?cues.map(c=>'<button class="cue-row '+(c.id===selectedId?"active":"")+'" data-cue="'+c.id+'"><span class="cue-index">'+String(c.id).padStart(2,"0")+'</span><span class="cue-copy"><strong class="'+(c.text!==c.original?"changed":"")+'">'+escapeHTML(c.text)+'</strong>'+(c.text!==c.original?'<small>原文：'+escapeHTML(c.original)+'</small>':"")+'<span class="cue-time">'+clock(c.start)+" — "+clock(c.end)+'</span></span><span class="cue-status '+(c.pending||c.layout_review&&!c.reviewed?"pending":c.reviewed?"reviewed":"")+'">'+(c.pending?"纠词待确认":c.reviewed?"已复核":c.layout_review?"检查遮挡":"未复核")+"</span></button>").join(""):'<div class="empty-history" style="padding:20px">没有符合条件的字幕。</div>';
+  $("cue-list").innerHTML=cues.length?cues.map(c=>'<button class="cue-row '+(c.id===selectedId?"active":"")+'" data-cue="'+c.id+'"><span class="cue-index">'+String(c.id).padStart(2,"0")+'</span><span class="cue-copy"><strong class="'+(c.text!==c.original?"changed":"")+'">'+escapeHTML(c.text)+'</strong>'+(c.text!==c.original?'<small>原文：'+escapeHTML(c.original)+'</small>':"")+'<span class="cue-time">'+clock(c.start)+" — "+clock(c.end)+'</span></span><span class="cue-status '+(c.pending||c.layout_review&&!c.reviewed?"pending":c.reviewed?"reviewed":"")+'">'+(c.pending?"纠词待确认":c.reviewed?"已复核":c.layout_review?"检查遮挡":c.recognition_review?"识别待试听":"未复核")+"</span></button>").join(""):'<div class="empty-history" style="padding:20px">没有符合条件的字幕。</div>';
   $("cue-list").querySelectorAll("[data-cue]").forEach(button=>button.addEventListener("click",()=>guardDraft(()=>selectCue(Number(button.dataset.cue),true))));
 }
 function renderInspector(){
   const cue=currentCue();if(!cue)return;
-  $("selected-number").textContent="第 "+cue.id+" 条";$("original-text").textContent=cue.original;
+  $("selected-number").textContent="第 "+cue.id+" 条";$("original-text").textContent=cue.original;$("recognition-note").classList.toggle("hidden",!cue.recognition_review||cue.reviewed);
   $("edited-text").value=cue.text;$("edit-start").value=cue.start;$("edit-end").value=cue.end;
   const decisions=result.edits?.[String(cue.id)]?.decisions||{};
   $("proposal-list").innerHTML=cue.proposals.map((p,i)=>{
@@ -138,7 +138,8 @@ async function pollJob(first=false){
     pollFailures=0;
     const running=["queued","running","exporting"].includes(state.status);
     jobWorking=running;
-    $("progress-panel").classList.toggle("hidden",!running);
+    $("progress-panel").classList.toggle("hidden",!running && state.status!=="error");
+    $("retry-job").classList.toggle("hidden",state.status!=="error" || !state.request);
     $("progress-title").textContent=state.status==="exporting"?"正在导出":"正在核对与排版";
     $("progress-message").textContent=state.message;$("progress-percent").textContent=Math.round(state.progress*100)+"%";$("progress-bar").style.width=Math.round(state.progress*100)+"%";
     lockEditor();
@@ -153,9 +154,10 @@ async function pollJob(first=false){
   }catch(error){if(jobWorking&&(error.status>=500||!error.status)&&++pollFailures<=3){$("progress-message").textContent="暂时无法读取进度，正在重连…";pollTimer=setTimeout(()=>pollJob(first),1800);return;}jobWorking=false;lockEditor();$("progress-panel").classList.add("hidden");toast(error.message,true);}
 }
 $("upload-form").addEventListener("submit",async event=>{
-  event.preventDefault();const file=$("video-input").files[0];if(!file)return;if(file.size>250*1024*1024){toast("视频最多 250 MB，请先截取短片段",true);return;}
+  event.preventDefault();const file=$("video-input").files[0];if(!file)return;if(file.size>2*1024**3){toast("视频最大 2 GB，请压缩文件后重试",true);return;}
   $("start-button").disabled=true;
-  try{result=null;$("workspace").classList.add("hidden");const data=await api("/api/jobs",{method:"POST",body:new FormData(event.currentTarget)});await openJob(data.id);}catch(error){toast(error.message,true);$("start-button").disabled=false;}
+  try{result=null;$("workspace").classList.add("hidden");$("welcome").classList.add("hidden");$("progress-panel").classList.remove("hidden");$("retry-job").classList.add("hidden");$("progress-title").textContent="正在导入视频";
+    const data=await MuzhunUI.upload("/api/jobs",new FormData(event.currentTarget),token,value=>{$("progress-percent").textContent=Math.round(value*100)+"%";$("progress-bar").style.width=value*100+"%";$("progress-message").textContent="文件导入本机处理环境，完成后开始识别";});await openJob(data.id);}catch(error){toast(error.message,true);$("start-button").disabled=false;$("welcome").classList.remove("hidden");$("progress-panel").classList.add("hidden");}
 });
 async function openDemo(kind){
   if(busy||jobWorking)return;busy=true;lockEditor();
@@ -250,3 +252,5 @@ async function checkEnvironment(){
 $("doctor-button").addEventListener("click",()=>{$("doctor-dialog").showModal();checkEnvironment();});$("doctor-retry").addEventListener("click",checkEnvironment);
 async function init(){try{const status=await api("/api/status");token=status.token;demoAvailable=status.demo_available;movingDemoAvailable=status.moving_demo_available;lockEditor();await refreshHistory();const id=new URLSearchParams(location.search).get("job");if(id)await openJob(id);}catch(error){toast("服务连接失败："+error.message,true);}}
 init();
+
+$("retry-job").addEventListener("click",async()=>{try{$("retry-job").disabled=true;await post(`/api/jobs/${jobId}/retry`,{});await pollJob();}catch(error){toast(error.message,true);}finally{$("retry-job").disabled=false;}});

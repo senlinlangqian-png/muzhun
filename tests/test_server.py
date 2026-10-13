@@ -22,7 +22,7 @@ class ServerTests(unittest.TestCase):
     def test_page_and_status(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         status = self.client.get("/api/status").json()
-        self.assertEqual(status["max_duration"], 600)
+        self.assertEqual(status["max_duration"], 7200)
         self.assertIn("token", status)
         self.assertEqual(status["version"], __version__)
 

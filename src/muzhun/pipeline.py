@@ -12,6 +12,7 @@ from .layout import STYLES, estimated_metrics, plan
 from .media import extract_frames, probe, recognize_frames, transcribe, write_ass, write_json
 from .profiles import PROFILES, detect_profile, load_terms
 from .subtitles import parse_srt, write_srt
+from .limits import LANGUAGES, MAX_VIDEO_BYTES
 
 
 def settings_check(settings: dict) -> dict:
@@ -25,6 +26,10 @@ def settings_check(settings: dict) -> dict:
     if settings.get("position_policy", "adaptive") not in {"adaptive", "static"}:
         raise ValueError("位置策略须为 adaptive 或 static")
     settings.setdefault("position_policy", "adaptive")
+    if settings.get("language", "auto") not in LANGUAGES:
+        raise ValueError("不支持的识别语言")
+    if settings.get("script", "auto") not in {"auto", "original", "simplified"}:
+        raise ValueError("不支持的中文字形")
     for region in settings.get("regions", []):
         rect = region.get("rect", [])
         if len(rect) != 4 or not all(isinstance(v, (int, float)) and 0 <= v <= 1 for v in rect) or rect[0] >= rect[2] or rect[1] >= rect[3]:
@@ -65,8 +70,14 @@ def replan(result: dict, settings: dict | None = None, edits: dict | None = None
             cue[key] = float(edit.get(key, cue["source_" + key]))
         if not all(math.isfinite(cue[key]) for key in ("start", "end")) or cue["start"] < 0 or cue["end"] <= cue["start"] or cue["end"] > output["metadata"]["duration"] + 0.1:
             raise ValueError("字幕时间须位于视频内且结束晚于开始")
-        cue["proposals"] = propose_corrections(cue, output["frames"], terms, linked=True)
-        independent = propose_corrections(cue, output["frames"], terms, linked=False)
+        base_text = cue["original"]
+        script = output["settings"].get("script", "auto")
+        if output.get("asr", {}).get("engine") == "faster-whisper" and (script == "simplified" or (script == "auto" and output["asr"].get("language") == "zh")):
+            from .lyrics import simplified
+            base_text = simplified(base_text)
+        analysis_cue = {**cue, "original": base_text}
+        cue["proposals"] = propose_corrections(analysis_cue, output["frames"], terms, linked=True)
+        independent = propose_corrections(analysis_cue, output["frames"], terms, linked=False)
         decisions = {}
         for key, value in edit.get("decisions", {}).items():
             if value not in {"accepted", "rejected", "pending"}:
@@ -79,10 +90,10 @@ def replan(result: dict, settings: dict | None = None, edits: dict | None = None
             decisions[str(key)] = value
         if "decisions" in edit:
             edit["decisions"] = decisions
-        cue["text"] = edit.get("text", apply_corrections(cue["original"], cue["proposals"], decisions))
+        cue["text"] = edit.get("text", apply_corrections(base_text, cue["proposals"], decisions))
         if not isinstance(cue["text"], str) or not cue["text"].strip() or len(cue["text"]) > 2000:
             raise ValueError("字幕正文不能为空或超过 2000 字符")
-        cue["independent_text"] = apply_corrections(cue["original"], independent)
+        cue["independent_text"] = apply_corrections(base_text, independent)
         cue["bindings"] = bind_regions(cue, cue["text"], output["frames"], terms)
         cue["pending"] = sum(decision_for(proposal, i, decisions) == "pending" for i, proposal in enumerate(cue["proposals"]))
     output["cues"].sort(key=lambda cue: (cue["start"], cue["end"], cue["id"]))
@@ -115,6 +126,8 @@ def process(video: Path, job_dir: Path, settings: dict | None = None, srt: str |
             model: str = "small", cache_dir: Path | None = None, progress=lambda *_: None) -> dict:
     started = time.monotonic()
     job_dir.mkdir(parents=True, exist_ok=True)
+    if video.is_file() and video.stat().st_size > MAX_VIDEO_BYTES:
+        raise ValueError("视频最大 2 GB")
     metadata = probe(video)
     requested = settings or {}
     default_font = STYLES.get(requested.get("style", "professional"), STYLES["professional"])["font"]
@@ -130,7 +143,7 @@ def process(video: Path, job_dir: Path, settings: dict | None = None, srt: str |
         profile = detect_profile(screen_text, settings["profile"])
         terms = load_terms(profile["id"], settings.get("glossary", "")) + visible_terms(frames)
         hints = list(dict.fromkeys(term["text"] for term in terms if screen_evidence(term["text"], frames)))[:24]
-        cues, asr = transcribe(video, metadata, model, cache_dir or job_dir.parent / ".cache", progress, job_dir / "audio.wav", hints)
+        cues, asr = transcribe(video, metadata, model, cache_dir or job_dir.parent / ".cache", progress, job_dir / "audio.wav", hints, None if settings.get("language", "auto") == "auto" else settings["language"])
     # Reject mismatched SRT rather than silently truncating its timeline.
     if any(cue["end"] > metadata["duration"] + 0.1 for cue in cues):
         raise ValueError("字幕时间超过视频长度，请检查 SRT 是否对应此视频")

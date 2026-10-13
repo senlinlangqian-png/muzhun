@@ -43,19 +43,19 @@ def main():
     if not base_python.is_file():
         base_python = Path(sys.executable)
     print("Installing from a fresh source folder; logs stay in .cache/release-tests.", flush=True)
-    if os.name == "nt":
-        install_command = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", project / "run.ps1",
-                           "-Python", base_python, "-InstallOnly"]
-    else:
-        install_command = [base_python, project / "scripts/launch.py", "--install-only"]
+    skill = directory / "skills/muzhun-subtitles"
+    runtime_record = directory / "runtime.json"
+    install_command = [base_python, project / "scripts/setup.py", "--agent", "deepseek",
+                       "--destination", skill, "--runtime-record", runtime_record]
     command(install_command)
     print("Fresh environment installed. Checking native libraries and missing model cache.", flush=True)
     report = json.loads(command([python, "-m", "muzhun.cli", "doctor", "--full"]))
     assert report["ready"] and not report["models_cached"], report
     second = command(install_command)
     assert "Installing Muzhun dependencies" not in second, second
-    skill = directory / "skills/muzhun-subtitles"
-    command([python, project / "scripts/install_skill.py", "--agent", "deepseek", "--destination", skill])
+    runtime = json.loads(runtime_record.read_text("utf-8"))
+    assert Path(runtime["root"]).resolve() == project.resolve(), runtime
+    assert Path(runtime["python"]).resolve() == python.resolve(), runtime
     result = json.loads(command([python, skill / "scripts/run.py", "deliver", project / "examples/dynamic-demo.mp4",
                                  "--srt", project / "examples/dynamic-input.srt", "--out", project / "outputs/fresh-delivery",
                                  "--synthetic-demo"]))
@@ -69,7 +69,7 @@ def main():
     assert lrc.is_file() and lyrics["summary"]["exportable"], lyrics
     summary = {"scope": "fresh-source-folder-on-same-Windows-machine" if os.name == "nt" else "fresh-source-folder-on-same-machine",
                "version": report["version"], "ready": report["ready"], "models_cached": report["models_cached"],
-               "second_start_reinstalls": False, "skill_agent": "deepseek", "skill_delivery": True,
+               "second_start_reinstalls": False, "unified_setup": True, "skill_agent": "deepseek", "skill_delivery": True,
                "lyrics_export": True, "lyrics_bytes": lrc.stat().st_size, "video_bytes": video.stat().st_size,
                "work_dir": str(directory), "log": str(log)}
     (ROOT / ".cache/release-install-verification.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), "utf-8")

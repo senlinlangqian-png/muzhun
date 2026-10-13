@@ -63,6 +63,8 @@ def main(argv=None) -> int:
         if args.install_only:
             print("Muzhun environment is installed. No speech model was downloaded.")
             return 0
+        from fonts import ensure_font
+        ensure_font(python, ROOT)
         command = [str(python), "-m", "muzhun.cli", "serve", "--port", str(args.port)]
         if not args.no_browser:
             command.append("--open-browser")
