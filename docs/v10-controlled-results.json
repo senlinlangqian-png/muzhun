@@ -143,5 +143,7 @@
     "delivery_zip_download_bytes_match": true,
     "console_errors_observed": false,
     "scope": "original synthetic demos only; no human review labels claimed"
-  }
+  },
+  "automatic_tests": 173,
+  "installer_console": "UTF-8, including an explicit cp1252-pipe regression"
 }

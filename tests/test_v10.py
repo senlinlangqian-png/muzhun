@@ -191,6 +191,18 @@ class LongRecognitionTests(unittest.TestCase):
 
 
 class InstallationAndOCRTests(unittest.TestCase):
+    def test_installer_chinese_output_works_in_a_cp1252_pipe(self):
+        fonts = load_script("fonts")
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="cp1252")
+        with tempfile.TemporaryDirectory() as name, patch("sys.stdout", stream), patch.dict(os.environ, {}, clear=True), \
+             patch.object(fonts.subprocess, "run", return_value=subprocess.CompletedProcess([], 1)), \
+             patch.object(fonts.urllib.request, "urlopen", return_value=io.BytesIO(b"unexpected download")):
+            with self.assertRaisesRegex(RuntimeError, "校验失败"):
+                fonts.ensure_font(Path(sys.executable), Path(name))
+            stream.flush()
+            self.assertIn("本机没有可用中文字体", raw.getvalue().decode("utf-8"))
+
     def test_verified_font_download_rejects_changed_bytes(self):
         fonts = load_script("fonts")
         with tempfile.TemporaryDirectory() as name, patch.dict(os.environ, {}, clear=True), \

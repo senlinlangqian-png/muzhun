@@ -51,6 +51,8 @@ def install(root: Path) -> Path:
 
 
 def main(argv=None) -> int:
+    from fonts import configure_console
+    configure_console()
     parser = argparse.ArgumentParser(description="Install and open the local Muzhun workspace")
     parser.add_argument("--install-only", action="store_true")
     parser.add_argument("--no-browser", action="store_true")

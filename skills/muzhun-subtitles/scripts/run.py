@@ -44,6 +44,9 @@ def find_runtime() -> tuple[Path, Path]:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     try:
         if sys.argv[1:2] == ["setup"]:
             import argparse

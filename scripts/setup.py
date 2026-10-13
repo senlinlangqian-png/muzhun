@@ -12,6 +12,8 @@ from install_skill import AGENT_ROOTS, default_destination
 
 
 def main(argv=None):
+    from fonts import configure_console
+    configure_console()
     parser = argparse.ArgumentParser(description="安装幕准运行环境和 Agent Skill")
     parser.add_argument("--agent", choices=list(AGENT_ROOTS))
     parser.add_argument("--choose-agent", action="store_true")

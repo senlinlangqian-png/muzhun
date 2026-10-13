@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -11,7 +12,15 @@ FONT_URL = "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaed
 FONT_SHA256 = "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b"
 
 
+def configure_console():
+    # Windows pipes can otherwise default to cp1252 even when the UI is Chinese.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def ensure_font(python: Path, root: Path):
+    configure_console()
     probe = subprocess.run([str(python), "-c", "from muzhun.layout import font_path; font_path()"],
                            cwd=root, capture_output=True)
     if probe.returncode == 0:
