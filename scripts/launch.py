@@ -51,6 +51,8 @@ def install(root: Path) -> Path:
 
 
 def main(argv=None) -> int:
+    from fonts import configure_console
+    configure_console()
     parser = argparse.ArgumentParser(description="Install and open the local Muzhun workspace")
     parser.add_argument("--install-only", action="store_true")
     parser.add_argument("--no-browser", action="store_true")
@@ -63,6 +65,8 @@ def main(argv=None) -> int:
         if args.install_only:
             print("Muzhun environment is installed. No speech model was downloaded.")
             return 0
+        from fonts import ensure_font
+        ensure_font(python, ROOT)
         command = [str(python), "-m", "muzhun.cli", "serve", "--port", str(args.port)]
         if not args.no_browser:
             command.append("--open-browser")

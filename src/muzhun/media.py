@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import copy
+import math
 import os
 import secrets
 import shutil
@@ -14,7 +17,7 @@ from PIL import Image
 
 from .subtitles import ass_escape, timestamp
 
-MAX_DURATION = 600
+from .limits import MAX_DURATION
 
 
 def probe(path: Path) -> dict:
@@ -23,8 +26,8 @@ def probe(path: Path) -> dict:
             raise ValueError("请上传含画面的 MP4、MOV、MKV 或 WebM 视频")
         stream = container.streams.video[0]
         duration = float(container.duration / av.time_base) if container.duration else float((stream.duration or 0) * stream.time_base)
-        if duration <= 0 or duration > MAX_DURATION:
-            raise ValueError("支持时长不超过 10 分钟的可解码视频")
+        if not math.isfinite(duration) or duration <= 0 or duration > MAX_DURATION:
+            raise ValueError("支持时长不超过 2 小时的可解码视频")
         return {"width": stream.width, "height": stream.height, "duration": round(duration, 3),
                 "fps": float(stream.average_rate or 25), "has_audio": bool(container.streams.audio), "filename": path.name}
 
@@ -32,7 +35,7 @@ def probe(path: Path) -> dict:
 def extract_frames(video: Path, job_dir: Path, metadata: dict, progress) -> list[dict]:
     frame_dir = job_dir / "frames"
     frame_dir.mkdir(exist_ok=True)
-    step = max(1.0, metadata["duration"] / 180)
+    step = max(1.0, metadata["duration"] / 600)
     times = [round(index * step, 3) for index in range(int(metadata["duration"] / step) + 1)]
     times = [t for t in times if t < metadata["duration"] - 0.04]
     result = []
@@ -69,7 +72,14 @@ def ocr_engine():
 
 def recognize_frames(frames: list[dict], job_dir: Path, progress) -> None:
     engine = ocr_engine()
+    observed = {}
     for index, frame in enumerate(frames):
+        signature = hashlib.sha256((job_dir / frame["image"]).read_bytes()).hexdigest()
+        if signature in observed:
+            frame["ocr"] = copy.deepcopy(observed[signature])
+            frame["ocr_reused"] = True
+            progress(.18 + .35 * (index + 1) / len(frames), f"复用相同画面 {index + 1}/{len(frames)}")
+            continue
         result, _ = engine(str(job_dir / frame["image"]))
         items = []
         for box, text, confidence in result or []:
@@ -78,6 +88,7 @@ def recognize_frames(frames: list[dict], job_dir: Path, progress) -> None:
                           "rect": [max(0, min(xs) / frame["width"]), max(0, min(ys) / frame["height"]),
                                    min(1, max(xs) / frame["width"]), min(1, max(ys) / frame["height"])]})
         frame["ocr"] = items
+        observed[signature] = items
         progress(0.18 + 0.35 * (index + 1) / len(frames), f"识别画面文字 {index + 1}/{len(frames)}")
 
 
@@ -91,51 +102,21 @@ def whisper_model(name: str, cache: str):
 
 
 def transcribe(video: Path, metadata: dict, model: str, cache_dir: Path, progress, audio_path: Path,
-               hints: list[str] | None = None) -> tuple[list[dict], dict]:
+               hints: list[str] | None = None, language: str | None = None, content="speech") -> tuple[list[dict], dict]:
     if not metadata["has_audio"]:
         raise ValueError("视频没有音轨。请同时提供 SRT 字幕。")
-    progress(0.54, f"加载 {model} 语音模型，首次使用会下载模型")
-    engine = whisper_model(model, str(cache_dir / "models"))
-    # Pass PCM samples: older faster-whisper decoders use metadata_errors,
-    # removed by newer PyAV. FFmpeg also normalizes timestamps and sample rate.
-    import imageio_ffmpeg
-    import numpy as np
-    import wave
-    command = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error", "-i", str(video),
-               "-vn", "-map", "0:a:0", "-af", "aresample=async=1:first_pts=0", "-ac", "1", "-ar", "16000",
-               "-c:a", "pcm_s16le", str(audio_path)]
-    decoded = subprocess.run(command, capture_output=True, timeout=180)
-    if decoded.returncode:
-        raise ValueError("音轨无法解码，请检查视频或提供已有 SRT")
-    with wave.open(str(audio_path), "rb") as source:
-        samples = np.frombuffer(source.readframes(source.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
-    segments, info = engine.transcribe(samples, beam_size=3, vad_filter=True, word_timestamps=True,
-                                      condition_on_previous_text=False, hotwords=", ".join(hints or []) or None)
-    cues = []
-    for segment in segments:
-        # Keep word-derived boundaries; split long speech at pauses / bounded length.
-        words = segment.words or []
-        if not words:
-            if segment.text.strip():
-                cues.append({"id": len(cues) + 1, "start": round(float(segment.start), 3), "end": round(float(segment.end), 3), "original": segment.text.strip()})
-            continue
-        group = []
-        for word in words:
-            if group and (word.start - group[-1].end > 0.5 or word.end - group[0].start > 5.0
-                          or len("".join(w.word for w in group)) + len(word.word) > 65):
-                cues.append({"id": len(cues) + 1, "start": round(float(group[0].start), 3), "end": round(float(max(group[0].start + 0.1, group[-1].end)), 3),
-                             "original": "".join(w.word for w in group).strip()})
-                group = []
-            group.append(word)
-        if group:
-            cues.append({"id": len(cues) + 1, "start": round(float(group[0].start), 3), "end": round(float(max(group[0].start + 0.1, group[-1].end)), 3),
-                         "original": "".join(w.word for w in group).strip()})
-        progress(0.56 + 0.25 * min(segment.end / metadata["duration"], 1), f"语音识别 {segment.end:.0f}/{metadata['duration']:.0f} 秒")
+    from .transcription import decode_audio, recognize, speech_cues
+    progress(0.54, "解码音轨")
+    duration = decode_audio(video, audio_path)
+    def recognition_progress(value, message):
+        progress(.56 + .25 * value, message)
+    words, segments, info = recognize(audio_path, model, cache_dir, recognition_progress,
+        language=language, hints=hints, engine_factory=whisper_model,
+        singing=content == "mixed", recover_gaps=content == "mixed")
+    cues = speech_cues(words, segments, min(metadata["duration"], duration))
     if not cues:
         raise ValueError("没有识别到可用语音，请检查音轨或上传已有 SRT")
-    return cues, {"engine": "faster-whisper", "model": model, "language": info.language,
-                  "language_probability": round(float(info.language_probability), 3), "word_timing": True,
-                  "screen_hotwords": hints or []}
+    return cues, info
 
 
 def write_ass(placements: list[dict], width: int, height: int) -> str:
@@ -170,13 +151,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 def burn_video(video: Path, ass_file: Path, output: Path, progress) -> None:
     import imageio_ffmpeg
     filter_text = f"ass={ass_file.name}"
-    custom = os.environ.get("MUZHUN_FONT")
-    if custom:
-        from .layout import font_path
-        font_path()  # Validate that it is a readable font, using its real family.
+    from .layout import font_path
+    chosen_font = Path(font_path()[0]).resolve()
+    cached_font = Path(__file__).resolve().parents[2] / ".cache" / "fonts"
+    # A font downloaded into the project is not registered with fontconfig.
+    # Pass it to libass just as we do an explicit user font.
+    if os.environ.get("MUZHUN_FONT") or chosen_font.is_relative_to(cached_font.resolve()):
         font_dir = ass_file.parent / "fonts"
         font_dir.mkdir(exist_ok=True)
-        font_file = Path(custom).resolve()
+        font_file = chosen_font
         destination = font_dir / ("custom" + font_file.suffix.lower())
         if destination.resolve() != font_file:
             shutil.copyfile(font_file, destination)
@@ -185,7 +168,7 @@ def burn_video(video: Path, ass_file: Path, output: Path, progress) -> None:
                "-vf", filter_text, "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264",
                "-preset", "fast", "-crf", "20", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(output.resolve())]
     progress(0.1, "正在将字幕合成到视频")
-    process = subprocess.run(command, cwd=ass_file.parent, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900)
+    process = subprocess.run(command, cwd=ass_file.parent, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=max(900, MAX_DURATION * 2))
     if process.returncode != 0:
         raise RuntimeError("视频导出失败：" + process.stderr[-1800:])
     progress(1.0, "视频导出完成")

@@ -7,8 +7,8 @@ import zipfile
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOT_FILES = ["README.md", "LICENSE", "pyproject.toml", ".gitignore", "run.ps1", "install-skill.ps1",
-              "Start-Muzhun.cmd", "run.sh", "CONTRIBUTING.md", "requirements-tested-windows.txt", "CHANGELOG.md"]
+ROOT_FILES = ["README.md", "README.en.md", "LICENSE", "pyproject.toml", ".gitignore", "run.ps1", "install-skill.ps1",
+              "Start-Muzhun.cmd", "Install-Skill.cmd", "run.sh", "CONTRIBUTING.md", "requirements-tested-windows.txt", "CHANGELOG.md"]
 DEMO_FILES = ["demo.mp4", "demo-input.srt", "demo-truth.json", "demo-provenance.json",
               "dynamic-demo.mp4", "dynamic-input.srt", "dynamic-truth.json", "dynamic-provenance.json",
               "lyrics-demo.wav", "lyrics-demo.txt"]
@@ -19,6 +19,7 @@ def main():
     for folder in (".github", "docs", "src", "skills", "scripts", "tests"):
         files.extend(path for path in (ROOT / folder).rglob("*") if path.is_file()
                      and "__pycache__" not in path.parts and path.suffix != ".pyc"
+                     and not any(part.endswith(".egg-info") for part in path.parts)
                      and path.name != "runtime.json")
     missing = [str(path.relative_to(ROOT)) for path in files if not path.is_file()]
     if missing:

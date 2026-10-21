@@ -2,13 +2,15 @@
 
 ## Portable installation
 
-Install the repository environment first: on Windows run `run.ps1 -InstallOnly`; on macOS/Linux run `python3 scripts/launch.py --install-only`. Then run the project interpreter with `scripts/install_skill.py --agent deepseek` (DeepSeek Harness), `--agent claude`, `--agent cursor`, `--agent codex`, `--agent gemini`, `--agent opencode`, `--agent kimi`, or `--agent agents` (shared ~/.agents/skills). Windows also supports `install-skill.ps1 -Agent deepseek`. Existing installations require --update / -Update. --destination overrides the target. This copies the same skill and writes a runtime record local to that device; a copied record from someone else's computer is not portable.
+Windows users can double-click Install-Skill.cmd in the complete source package and select their Agent. A single CLI entry installs both the engine and skill: `python scripts/setup.py --agent deepseek` (or codex, claude, cursor, gemini, opencode, kimi, agents). Existing Muzhun skills update intentionally; unrelated destinations are rejected. `--destination` selects a custom directory. A standalone skill can use `python scripts/run.py setup --source ABSOLUTE_PROJECT --agent AGENT`. Setup registers a shared local runtime record; that record is never included in public packages. Python 3.12 is recommended. The first recognition downloads the chosen model; setup does not download speech models.
 
 DeepSeek Harness uses DSH_HOME/skills, default ~/.dsh/skills. In a normal local skill-enabled session invoke /muzhun-subtitles. Codex uses $muzhun-subtitles; Claude Code and Cursor use /muzhun-subtitles. If discovery is disabled or unavailable, explicitly load this SKILL.md and execute its scripts/run.py with a working Python interpreter. This does not install or configure the agent itself.
 
 Gemini CLI uses ~/.gemini/skills, OpenCode uses ~/.config/opencode/skills, and Kimi Code CLI uses ~/.kimi/skills. Ask these agents to use the muzhun-subtitles skill; do not assume an identical slash command in every host. Current Codex also documents ~/.agents/skills, so --agent agents is an alternative for a new installation. Keep a single installed copy per discovery scope to avoid stale duplicates; the codex target preserves this desktop's CODEX_HOME / ~/.codex setup. Tool and shell access must be enabled in the chosen agent session.
 
 ## Audio / LRC
+
+For video dialogue plus background singing: `python scripts/run.py deliver VIDEO.mp4 --out OUTPUT --audio-content mixed --model small`. Ordinary dialogue keeps the default `--audio-content speech`. Mixed mode needs listening review and is not sound-effect detection or source separation.
 
 ~~~text
 python scripts/run.py lyrics AUDIO.mp3 --text LYRICS.txt --out OUTPUT --model small --language zh
@@ -40,7 +42,7 @@ Use scripts/run.py as the entrypoint, from the installed skill directory or with
 ~~~text
 python scripts/run.py doctor
 python scripts/run.py doctor --full
-python scripts/run.py deliver INPUT.mp4 --out OUTPUT --model small
+python scripts/run.py deliver INPUT.mp4 --out OUTPUT --model small --language zh
 python scripts/run.py deliver INPUT.mp4 --srt INPUT.srt --out OUTPUT
 python scripts/run.py inspect INPUT.mp4 --out INSPECTION
 python scripts/run.py process INPUT.mp4 --out OUTPUT --profile auto --model base
@@ -113,3 +115,18 @@ For a standalone skill ZIP, install the Muzhun engine from its source package fi
 The installer writes CODEX_HOME/skills or ~/.codex/skills, matching this desktop setup. Use --destination for another host's documented skill folder (for example ~/.agents/skills/muzhun-subtitles). Use --update only for an intentional update. Moving the engine folder requires rerunning the installer with --update, or explicitly setting MUZHUN_HOME to the new initialized root; this override takes priority over a saved record. Do not install duplicate skills under the same name in multiple directories.
 
 doctor returns structured checks, repair hints and cached-model names, and exits nonzero for a failed required check. --full additionally loads the OCR and speech engine libraries without downloading models. Cache presence is not proof that transcription is correct. serve --open-browser opens the browser after readiness; an occupied requested port is skipped, and the actual address is printed.
+
+## 1.0 speech and line operations
+
+~~~text
+python scripts/run.py lyrics INPUT.wav --out OUTPUT --content speech --language zh --glossary terms.txt
+python scripts/run.py lyrics SONG.mp3 --out OUTPUT --content song --text lyrics.txt
+~~~
+
+For lyrics-revise JSON, include the current revision. Additional actions:
+
+~~~json
+{"action":"split","id":1,"at":6,"time":2.55,"revision":0}
+~~~
+
+`merge` and `delete` take `id`; `align-range` takes `id`, `start`, `end`. All are reversible with undo/redo. Exportable means all lines have valid times, not that their wording/timing has been independently verified.

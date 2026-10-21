@@ -48,6 +48,10 @@ def main(argv=None) -> int:
         process_cmd.add_argument("--position-policy", default="adaptive", choices=["adaptive", "static"], help="C 模式随画面分时避让，或每句固定一个位置")
         process_cmd.add_argument("--glossary", type=Path)
         process_cmd.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3-turbo"])
+        process_cmd.add_argument("--language", default="auto", choices=["auto", "zh", "en", "ja", "ko", "es", "fr", "de", "ru"])
+        process_cmd.add_argument("--script", default="auto", choices=["auto", "original", "simplified"])
+        process_cmd.add_argument("--audio-content", default="speech", choices=["speech", "mixed"],
+                                 help="speech 识别说话；mixed 同时尝试补识别空白片段中的背景歌词，须试听")
         process_cmd.add_argument("--synthetic-demo", action="store_true", help="明确标记合成演示素材，不计为真实评测")
     render = commands.add_parser("render", help="导出带字幕视频")
     render.add_argument("report", type=Path)
@@ -92,7 +96,9 @@ def main(argv=None) -> int:
     lyrics.add_argument("--text", type=Path, help="UTF-8 / GB18030 歌词 TXT、已有 LRC 或 SRT；留空则自动转录")
     lyrics.add_argument("--out", type=Path, required=True)
     lyrics.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3-turbo"])
-    lyrics.add_argument("--language", choices=["zh", "en", "ja", "ko"])
+    lyrics.add_argument("--language", choices=["zh", "en", "ja", "ko", "es", "fr", "de", "ru"])
+    lyrics.add_argument("--content", default="song", choices=["song", "speech"])
+    lyrics.add_argument("--glossary", type=Path)
     lyrics.add_argument("--script", choices=["auto", "original", "simplified"], default="auto",
                         help="自动转录的中文字形：auto 对中文输出简体；提供的歌词始终保留原文")
     lyrics_align = commands.add_parser("lyrics-align", help="用已保存的音频锚点按新歌词重新对齐，不重跑识别")
@@ -129,7 +135,7 @@ def main(argv=None) -> int:
             if args.command == "lyrics":
                 output = args.out.resolve()
                 result = process_lyrics(args.audio.resolve(), output, read_text(args.text) if args.text else "",
-                                        args.model, cache, args.language, progress, args.script)
+                                        args.model, cache, args.language, progress, args.script, args.content, read_text(args.glossary) if args.glossary else "")
             else:
                 output = args.report.resolve().parent
                 payload = {"action": "realign", "lyrics": read_text(args.text), "revision": args.revision} if args.command == "lyrics-align" else json.loads(read_text(args.edits))
@@ -149,7 +155,8 @@ def main(argv=None) -> int:
         if args.command in {"process", "deliver"}:
             output = args.out.resolve()
             result = process(args.video.resolve(), output, {"profile": args.profile, "style": args.style,
-                             "position_policy": args.position_policy,
+                             "position_policy": args.position_policy, "language": args.language, "script": args.script,
+                             "audio_content": args.audio_content,
                              "glossary": read_text(args.glossary) if args.glossary else ""},
                              read_text(args.srt) if args.srt else None, args.model, cache, progress)
             result["source_video"] = str(args.video.resolve())

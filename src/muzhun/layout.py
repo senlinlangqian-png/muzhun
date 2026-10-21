@@ -31,6 +31,8 @@ def font_path(choice: str = "sans") -> tuple[str, str]:
     if choice == "bold":
         candidates += [(str(windir / "msyhbd.ttc"), "Microsoft YaHei"), ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", "Noto Sans CJK SC")]
     candidates += [(str(windir / "msyh.ttc"), "Microsoft YaHei"), ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "Noto Sans CJK SC"), ("/System/Library/Fonts/PingFang.ttc", "PingFang SC")]
+    bundled = Path(__file__).resolve().parents[2] / ".cache/fonts/NotoSansCJKsc-Regular.otf"
+    candidates.append((str(bundled), "Noto Sans CJK SC"))
     if choice == "mono":
         candidates.insert(0, (str(windir / "Deng.ttf"), "DengXian"))
     for path, family in candidates:

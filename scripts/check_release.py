@@ -25,6 +25,8 @@ def check_archive(path: Path, required: set[str]) -> dict:
                 raise ValueError(f"Unsafe archive entry: {name}")
             if any(part in {".venv", ".cache", "outputs", "__pycache__", ".git"} for part in entry.parts):
                 raise ValueError(f"Private/generated entry: {name}")
+            if any(part.endswith(".egg-info") for part in entry.parts):
+                raise ValueError(f"Generated editable-install metadata: {name}")
             if entry.name in {"runtime.json", ".env", "blind-key.json"}:
                 raise ValueError(f"Local-only entry: {name}")
             if entry.suffix in {".md", ".json", ".toml", ".ps1", ".py", ".yaml", ".yml", ".js", ".html", ".css"}:
@@ -48,6 +50,10 @@ def check(dist: Path) -> list[dict]:
         "muzhun/tests/test_v07.py", "muzhun/docs/v07-lyrics-preview.jpg",
         "muzhun/.github/ISSUE_TEMPLATE/bug_report.yml", "muzhun/.github/ISSUE_TEMPLATE/feature_request.yml",
         "muzhun/.github/ISSUE_TEMPLATE/question.yml",
+        "muzhun/README.en.md", "muzhun/Install-Skill.cmd", "muzhun/scripts/setup.py", "muzhun/scripts/fonts.py",
+        "muzhun/src/muzhun/transcription.py", "muzhun/src/muzhun/lyric_edits.py", "muzhun/src/muzhun/waveform.py",
+        "muzhun/tests/test_v10.py", "muzhun/docs/release-1.0.md", "muzhun/docs/v10-audio-preview.jpg",
+        "muzhun/docs/v10-video-preview.jpg",
     })
     with zipfile.ZipFile(dist / source["name"]) as archive:
         batches = [sum(not item.filename.startswith("muzhun/docs/") for item in archive.infolist()),
@@ -56,11 +62,13 @@ def check(dist: Path) -> list[dict]:
             raise ValueError("Source no longer fits the documented two-batch GitHub upload")
     skill = check_archive(dist / f"muzhun-subtitles-skill-{VERSION}.zip", {
         "muzhun-subtitles/SKILL.md", "muzhun-subtitles/scripts/run.py", "muzhun-subtitles/references/cli.md",
+        "muzhun-subtitles/references/video.md", "muzhun-subtitles/references/lyrics.md",
     })
     wheel_path = dist / f"muzhun-{VERSION}-py3-none-any.whl"
     wheel = check_archive(wheel_path, {"muzhun/web/index.html", "muzhun/web/app.js",
                          "muzhun/data/profiles.json", "muzhun/diagnostics.py", "muzhun/startup.py", "muzhun/editing.py",
-                         "muzhun/lyrics.py", "muzhun/lyrics_web.py", "muzhun/web/lyrics.html", "muzhun/web/lyrics.js"})
+                         "muzhun/lyrics.py", "muzhun/lyrics_web.py", "muzhun/web/lyrics.html", "muzhun/web/lyrics.js",
+                         "muzhun/web/waveform.js", "muzhun/web/client.js", "muzhun/transcription.py", "muzhun/lyric_edits.py", "muzhun/waveform.py"})
     with zipfile.ZipFile(wheel_path) as archive:
         metadata = archive.read(f"muzhun-{VERSION}.dist-info/METADATA").decode()
         if f"Version: {VERSION}" not in metadata.splitlines():

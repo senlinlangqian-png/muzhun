@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 let token = "", job = null, result = null, selected = null, busy = false, listenEnd = null, retry = 0;
 let lyricsDirty = false, draftJob = null, playingId = null;
 const audio = $("audio-player");
+const waveform = new MuzhunWaveform($("waveform"),audio,(start,end)=>api(`/api/lyrics/${job}/waveform?start=${start}&end=${end}`),time=>{listenEnd=null;audio.currentTime=time;});
 function error(message = "") { $("lyrics-error").textContent = message; $("lyrics-error").classList.toggle("hidden", !message); }
 async function api(url, options = {}) {
   const response = await fetch(url, {...options, headers: {"X-Muzhun-Token": token, ...options.headers}});
@@ -23,9 +24,10 @@ function renderList() {
   const query = $("lyrics-search").value.toLocaleLowerCase(), filter = $("lyrics-filter").value;
   const rows = result.lines.filter(row => row.text.toLocaleLowerCase().includes(query) && (filter === "all" || (filter === "untimed" && row.start === null) || (filter === "unreviewed" && !row.reviewed) || (filter === "issues" && row.issues.length && !row.reviewed)));
   $("lyrics-list").replaceChildren();
+  const positions=new Map(result.lines.map((row,index)=>[row.id,index+1]));
   for (const row of rows) {
     const button = document.createElement("button"); button.dataset.id = row.id; button.className = "lyric-row" + (row.id === selected ? " selected" : "") + (row.id === playingId ? " playing" : "");
-    const index = document.createElement("span"); index.textContent = String(row.id).padStart(2,"0"); index.className = "badge";
+    const index = document.createElement("span"); index.textContent = String(positions.get(row.id)).padStart(2,"0"); index.className = "badge";
     const body = document.createElement("span"); body.className = "lyric-body";
     const text = document.createElement("strong"); text.textContent = row.text;
     const times = document.createElement("small"); times.textContent = row.start === null ? "需要手动定位" : `${timeLabel(row.start)} — ${timeLabel(row.end)}`;
@@ -39,7 +41,7 @@ function renderList() {
 function choose(id, seek = false) {
   listenEnd = null; selected = id;
   const row = current(); if (!row) return;
-  $("lyric-number").textContent = String(id).padStart(2,"0"); $("lyric-edit").value = row.text;
+  $("lyric-number").textContent = String(result.lines.findIndex(line=>line.id===id)+1).padStart(2,"0"); $("lyric-edit").value = row.text;
   $("lyric-original").textContent = "原文：" + row.original;
   $("lyric-anchor").textContent = row.anchor_text ? `识别锚点：${row.anchor_text} · 文字匹配 ${Math.round(row.coverage * 100)}%` : "";
   $("lyric-start").value = displayedTime(row.start) ?? ""; $("lyric-end").value = displayedTime(row.end) ?? "";
@@ -47,11 +49,15 @@ function choose(id, seek = false) {
   $("lyric-review").textContent = row.reviewed ? "取消复核标记" : "标记已复核";
   $("lyric-listen").disabled = row.start === null; $("lyric-review").disabled = row.start === null;
   if (seek && row.start !== null) { audio.pause(); audio.currentTime = row.start; }
+  $("range-start").value = Math.max(0,(row.start ?? audio.currentTime)-3).toFixed(1);
+  $("range-end").value = Math.min(result.metadata.duration,(row.end ?? audio.currentTime+10)+3).toFixed(1);
+  waveform.focus(row.start,row.end,result.metadata.duration);
   renderList();
 }
 function render() {
   $("lyrics-welcome").classList.add("hidden"); $("lyrics-progress").classList.add("hidden"); $("lyrics-workspace").classList.remove("hidden");
   $("lyrics-summary").textContent = `${result.summary.total} 行 · 已定位 ${result.summary.timed} · 已复核 ${result.summary.reviewed}`;
+  $("lines-heading").textContent = result.content === "speech" ? "字幕" : "歌词";
   $("lyrics-undo").disabled = !result.history.undo.length; $("lyrics-redo").disabled = !result.history.redo.length;
   for (const [id, name] of [["lyrics-lrc","lyrics.lrc"],["lyrics-srt","lyrics.srt"],["lyrics-report","lyrics-result.json"]]) {
     const link = $(id); const available = name.endsWith(".json") || result.summary.exportable;
@@ -64,7 +70,7 @@ function render() {
   $("lyrics-realign-note").textContent = result.summary.can_realign ? "复用已保存的音频锚点，不重跑识别。更新所有歌词行，旧结果可撤销。已有 LRC/SRT 使用自己的时间。" : "旧记录没有逐词锚点；纯文本重对齐请重新上传音频。导入已有 LRC/SRT 可以直接使用。";
   if (draftJob !== job) { $("lyrics-realign-text").value = result.text_source === "asr-transcript" ? "" : result.lines.map(row => row.text).join("\n"); lyricsDirty = false; draftJob = job; }
   choose(result.lines.some(row => row.id === selected) ? selected : result.lines[0].id);
-  showLive();
+  showLive(); refreshRecentAudio();
 }
 async function update(payload) {
   if (busy) return;
@@ -80,7 +86,8 @@ async function poll() {
   try {
     const state = await api(`/api/lyrics/${job}`); retry = 0;
     $("lyrics-message").textContent = state.message; $("lyrics-meter").value = state.progress;
-    if (state.status === "error") { $("lyrics-welcome").classList.remove("hidden"); $("lyrics-progress").classList.add("hidden"); throw new Error(state.message); }
+    if (state.status === "error") { $("lyrics-welcome").classList.remove("hidden"); $("lyrics-retry").classList.toggle("hidden",!state.request); error(state.message); return; }
+    $("lyrics-retry").classList.add("hidden");
     if (state.status === "ready") {
       result = state.result; $("lyrics-title").textContent = state.name; audio.src = state.audio_url; render(); return;
     }
@@ -110,7 +117,9 @@ $("lyrics-simplify").addEventListener("click", () => { if (leaveDraft()) update(
 $("lyrics-form").addEventListener("submit", async event => {
   event.preventDefault(); error(); $("lyrics-start").disabled = true;
   try {
-    const response = await api("/api/lyrics", {method:"POST",body:new FormData(event.target)});
+    const file=$("audio-input").files[0];if(file?.size>512*1024**2)throw new Error("音频最大 512 MB");
+    $("lyrics-progress").classList.remove("hidden");$("lyrics-retry").classList.add("hidden");
+    const response = await MuzhunUI.upload("/api/lyrics",new FormData(event.target),token,value=>{$("lyrics-meter").value=value;$("lyrics-message").textContent=`正在导入音频 ${Math.round(value*100)}%`;});
     job = response.id; selected = null; result = null; history.replaceState(null,"",`/lyrics?job=${job}`);
     $("lyrics-welcome").classList.add("hidden"); $("lyrics-progress").classList.remove("hidden"); poll();
   } catch (failure) { error(failure.message); }
@@ -146,14 +155,24 @@ $("lyrics-shift").addEventListener("click", () => { if (leaveDraft()) update({of
 $("lyrics-new").addEventListener("click", () => { if (!busy && leaveAllDrafts()) { audio.pause(); location.href = "/lyrics"; } });
 $("lyric-next").addEventListener("click", () => {
   if (busy || !leaveDraft()) return;
-  const rows = result.lines.filter(row => !row.reviewed), next = rows.find(row => row.id > selected) || rows[0];
+  const at=result.lines.findIndex(row=>row.id===selected), rows=[...result.lines.slice(at+1),...result.lines.slice(0,at+1)], next=rows.find(row=>!row.reviewed);
   if (!next) return error("全部歌词都已复核");
   $("lyrics-search").value = ""; $("lyrics-filter").value = "all"; choose(next.id, true);
 });
 for (const id of ["lyrics-lrc","lyrics-srt","lyrics-report"]) $(id).addEventListener("click", event => { if (dirty() || lyricsDirty || busy) { event.preventDefault(); error("先保存本句或应用补充歌词，再下载当前版本"); } });
 window.addEventListener("beforeunload", event => { if (dirty() || lyricsDirty) { event.preventDefault(); event.returnValue = ""; } });
 api("/api/status").then(state => {
-  token = state.token;
+  token = state.token; refreshRecentAudio();
   const requested = new URLSearchParams(location.search).get("job");
   if (requested && /^[a-f0-9]{16}$/.test(requested)) { job = requested; $("lyrics-welcome").classList.add("hidden"); $("lyrics-progress").classList.remove("hidden"); poll(); }
 }).catch(failure => error(failure.message));
+
+$("wave-span").addEventListener("change",()=>{waveform.span=Number($("wave-span").value);const row=current();if(row)waveform.focus(row.start,row.end,result.metadata.duration);});
+$("lyric-split").addEventListener("click",()=>{if(dirty())return error("先保存修改，再拆分本句");const at=[...$("lyric-edit").value.slice(0,$("lyric-edit").selectionStart)].length;update({action:"split",id:selected,at,time:audio.currentTime});});
+$("lyric-merge").addEventListener("click",()=>{if(leaveDraft())update({action:"merge",id:selected});});
+$("lyric-delete").addEventListener("click",()=>{if(!busy&&leaveDraft()&&window.confirm("删除这句字幕？保存后仍可撤销恢复。"))update({action:"delete",id:selected});});
+$("lyric-range").addEventListener("click",()=>{if(dirty())return error("先保存文字修改，再重新对齐本句");update({action:"align-range",id:selected,start:numberValue("range-start"),end:numberValue("range-end")});});
+$("lyrics-retry").addEventListener("click",async()=>{try{$("lyrics-retry").disabled=true;await api(`/api/lyrics/${job}/retry`,{method:"POST"});$("lyrics-welcome").classList.add("hidden");poll();}catch(failure){error(failure.message);}finally{$("lyrics-retry").disabled=false;}});
+async function refreshRecentAudio(){
+  try{const rows=await api("/api/lyrics");$("lyrics-history").replaceChildren();for(const row of rows){const a=document.createElement("a");a.href=`/lyrics?job=${row.id}`;a.className="history-item";const name=document.createElement("span");name.textContent=row.name;const state=document.createElement("small");state.textContent=({ready:"继续编辑",error:"处理未完成",running:"识别中",queued:"等待中"})[row.status]||row.status;a.append(name,state);a.addEventListener("click",event=>{if(!leaveAllDrafts())event.preventDefault();});$("lyrics-history").append(a);}if(!rows.length)$("lyrics-history").textContent="暂无音频记录";}catch(_){$("lyrics-history").textContent="暂时无法读取最近音频";}
+}

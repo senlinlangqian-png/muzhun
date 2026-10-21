@@ -17,6 +17,7 @@ from pathlib import Path
 from . import __version__
 from .editing import check_revision
 from .media import MAX_DURATION, whisper_model, write_json
+from .limits import LANGUAGES, MAX_TEXT_CHARS, MAX_LYRIC_LINES
 from .subtitles import parse_srt, write_srt
 
 MODELS = {"tiny", "base", "small", "medium", "large-v3-turbo"}
@@ -50,13 +51,13 @@ def probe_audio(path: Path) -> dict:
         stream = container.streams.audio[0]
         duration = float(container.duration / av.time_base) if container.duration else float((stream.duration or 0) * stream.time_base)
         if not math.isfinite(duration) or not 0 < duration <= MAX_DURATION:
-            raise ValueError("支持时长不超过 10 分钟的音频")
+            raise ValueError("支持时长不超过 2 小时的音频")
         return {"duration": round(duration, 3), "filename": path.name}
 
 
 def parse_lyrics(text: str, duration: float) -> tuple[list[dict], str]:
     text = text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
-    if len(text) > 30000:
+    if len(text) > MAX_TEXT_CHARS:
         raise ValueError("歌词过长，请分段处理")
     if "-->" in text:
         lines = [{"text": c["original"], "start": c["start"], "end": c["end"]} for c in parse_srt(text)]
@@ -102,8 +103,8 @@ def parse_lyrics(text: str, duration: float) -> tuple[list[dict], str]:
             lines, source = [row for row in events if row["text"]], "supplied-lrc"
         else:
             lines, source = [{"text": row, "start": None, "end": None} for row in plain], "provided-lyrics"
-    if not lines or len(lines) > 500 or any(len(row["text"]) > 1000 for row in lines):
-        raise ValueError("请提供 1–500 行歌词，每行不超过 1000 字")
+    if not lines or len(lines) > MAX_LYRIC_LINES or any(len(row["text"]) > 1000 for row in lines):
+        raise ValueError("请提供 1–3000 行歌词，每行不超过 1000 字")
     for index, row in enumerate(lines, 1):
         row.update(id=index, original=row["text"], reviewed=False, timing_source=source,
                    coverage=None, issues=[] if source != "provided-lyrics" else ["等待音频对齐"])
@@ -200,6 +201,12 @@ def align_lines(lines: list[dict], words: list[dict], duration: float) -> list[d
 
 def recognition_issues(cue: dict, language: str | None) -> list[str]:
     issues = []
+    if cue.get("boundary_review"):
+        issues.append("分段边界补回识别词，请试听确认")
+    elif cue.get("background_recovered"):
+        issues.append("从未覆盖片段补识别的歌词，请试听确认")
+    elif cue.get("recognition_review"):
+        issues.append("部分识别词把握较低，请试听确认")
     if cue.get("no_speech_prob", 0) > 0.6 or cue.get("avg_logprob", 0) < -1:
         issues.append("识别器对这段把握较低，请检查是否为伴奏或漏唱")
     if re.match(r"^(?:字幕\s*(?:by|由|[:：])|感谢(?:收看|观看)|请(?:点赞|订阅))", simplified(cue["text"]), re.I):
@@ -209,42 +216,22 @@ def recognition_issues(cue: dict, language: str | None) -> list[str]:
     return issues
 
 
-def recognize_audio(path: Path, output: Path, model: str, cache: Path, language: str | None, progress):
-    import imageio_ffmpeg
-    import numpy as np
-    progress(0.08, "解码音轨")
+def recognize_audio(path: Path, output: Path, model: str, cache: Path, language: str | None, progress, singing: bool = True, hints=None):
+    from .transcription import decode_audio, recognize
+    progress(.08, "解码音轨")
     target = output / "audio.wav"
-    decoded = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-hide_banner", "-loglevel", "error",
-                              "-i", str(path), "-vn", "-map", "0:a:0", "-ac", "1", "-ar", "16000",
-                              "-c:a", "pcm_s16le", str(target)], capture_output=True, timeout=180)
-    if decoded.returncode:
-        raise ValueError("音轨无法解码，请换用 WAV 或 MP3")
-    with wave.open(str(target), "rb") as audio:
-        samples = np.frombuffer(audio.readframes(audio.getnframes()), np.int16).astype(np.float32) / 32768.0
-    progress(0.15, f"加载 {model} 模型，首次使用需要下载")
-    engine = whisper_model(model, str(cache / "models"))
-    # Music is not speech-only: do not let a speech VAD silently discard singing.
-    segments, info = engine.transcribe(samples, language=language, beam_size=5, word_timestamps=True,
-                                      vad_filter=False, condition_on_previous_text=False)
-    words, cues = [], []
-    duration = len(samples) / 16000
-    for segment in segments:
-        if segment.text.strip() and segment.end > segment.start:
-            cues.append({"text": segment.text.strip(), "start": round(float(segment.start), 3),
-                         "end": round(min(float(segment.end), duration), 3),
-                         "no_speech_prob": float(segment.no_speech_prob), "avg_logprob": float(segment.avg_logprob)})
-        for word in segment.words or []:
-            words.append({"word": word.word, "start": round(float(word.start), 3), "end": round(float(word.end), 3)})
-        progress(0.2 + 0.6 * min(float(segment.end) / duration, 1), "识别音频时间锚点")
-    return words, cues, {"engine": "faster-whisper", "model": model, "language": info.language,
-                         "vad_filter": False, "word_timing": True}
+    decode_audio(path, target)
+    return recognize(target, model, cache, lambda value, message: progress(.15 + .65 * value, message),
+                     language=language, singing=singing, recover_gaps=singing, hints=hints, engine_factory=whisper_model)
 
 
 def process_lyrics(path: Path, output: Path, text: str, model: str, cache: Path,
-                   language: str | None = None, progress=lambda *_: None, script: str = "auto") -> dict:
+                   language: str | None = None, progress=lambda *_: None, script: str = "auto", content: str = "song", glossary: str = "") -> dict:
+    if content not in {"song", "speech"}:
+        raise ValueError("音频类型须为 song 或 speech")
     if model not in MODELS:
         raise ValueError("不支持的语音模型")
-    if language not in {None, "zh", "en", "ja", "ko"}:
+    if language is not None and language not in LANGUAGES - {"auto"}:
         raise ValueError("不支持的语言选项")
     if script not in {"auto", "original", "simplified"}:
         raise ValueError("不支持的中文字形选项")
@@ -254,7 +241,13 @@ def process_lyrics(path: Path, output: Path, text: str, model: str, cache: Path,
     asr = {"engine": "supplied-timing", "model": None}
     recognition, script_output = None, "original"
     if source not in {"supplied-lrc", "supplied-srt"}:
-        words, cues, asr = recognize_audio(path, output, model, cache, language, progress)
+        from .profiles import load_terms
+        hints = list(dict.fromkeys(term["text"] for term in load_terms("general", glossary)))[:64] if glossary.strip() else []
+        words, cues, asr = recognize_audio(path, output, model, cache, language, progress, content == "song", hints)
+        if content == "speech" or any(w.get("background_recovered") for w in words):
+            from .transcription import speech_cues
+            cues = [{**row, "text": row["original"]}
+                    for row in speech_cues(words, cues, metadata["duration"])]
         recognition = {"words": copy.deepcopy(words), "segments": copy.deepcopy(cues)}
         if lines:
             progress(0.85, "按歌词顺序匹配音频锚点")
@@ -269,8 +262,12 @@ def process_lyrics(path: Path, output: Path, text: str, model: str, cache: Path,
             lines = cues
         if not lines:
             raise ValueError("没有识别到歌词，请提供歌词原文，或导入已有 LRC 后手动定位")
+    if not (output / "audio.wav").is_file():
+        from .transcription import decode_audio
+        progress(.9, "准备试听音轨与波形")
+        decode_audio(path, output / "audio.wav")
     result = {"kind": "lyrics", "version": __version__, "revision": 0, "source_audio": str(path.resolve()),
-              "metadata": metadata, "text_source": source, "asr": asr, "lines": lines,
+              "metadata": metadata, "content": content, "text_source": source, "asr": asr, "lines": lines,
               "recognition": recognition, "script_output": script_output,
               "history": {"undo": [], "redo": []}}
     refresh(result)
@@ -342,6 +339,9 @@ def revise_lyrics(before: dict, payload: dict) -> dict:
             return result
         history[target] = (history[target] + [lyric_snapshot(result)])[-30:]
         restore_snapshot(result, history[source].pop())
+    elif action in {"split", "merge", "delete", "align-range"}:
+        from .lyric_edits import line_operation
+        line_operation(result, payload)
     elif action == "realign":
         text = payload.get("lyrics")
         if not isinstance(text, str):
@@ -362,7 +362,7 @@ def revise_lyrics(before: dict, payload: dict) -> dict:
         result["script_output"] = "simplified"
     elif action == "edit":
         edits = payload.get("edits", [])
-        if not isinstance(edits, list) or len(edits) > 500:
+        if not isinstance(edits, list) or len(edits) > MAX_LYRIC_LINES:
             raise ValueError("edits 须为歌词修改列表")
         known = {row["id"]: row for row in result["lines"]}
         for edit in edits:

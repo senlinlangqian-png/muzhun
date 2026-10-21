@@ -20,6 +20,7 @@ from .editing import StaleRevision, check_revision, mark_review, replacement_pre
 from .evaluation import annotation_template, blind_pack, evaluate
 from .media import burn_video, read_json, write_json
 from .pipeline import process, save_exports
+from .limits import capabilities, MAX_VIDEO_BYTES, MAX_TEXT_BYTES, LANGUAGES, MAX_TEXT_CHARS
 
 
 def create_app(root: Path) -> FastAPI:
@@ -51,7 +52,7 @@ def create_app(root: Path) -> FastAPI:
             if (folder / "state.json").exists():
                 jobs[job_id] = read_json(folder / "state.json")
                 if jobs[job_id]["status"] in {"running", "queued", "exporting"}:
-                    jobs[job_id].update(status="error", message="上次运行中断，请重新处理素材")
+                    jobs[job_id].update(status="error", message="上次运行中断，可重试并复用已完成片段")
             else:
                 raise HTTPException(404, "任务不存在")
         return jobs[job_id]
@@ -89,13 +90,13 @@ def create_app(root: Path) -> FastAPI:
             while chunk := await upload.read(1024 * 1024):
                 total += len(chunk)
                 if total > limit:
-                    raise HTTPException(413, "文件过大：视频最多 250 MB，字幕最多 2 MB")
+                    raise HTTPException(413, "文件过大：视频最多 2 GB，字幕最多 2 MB")
                 file.write(chunk)
         await upload.close()
 
     @app.get("/api/status")
     def status():
-        return {"token": token, "version": __version__, "max_duration": 600,
+        return {"token": token, "version": __version__, **capabilities(),
                 "demo_available": (root / "examples" / "demo.mp4").is_file(),
                 "moving_demo_available": (root / "examples" / "dynamic-demo.mp4").is_file()}
 
@@ -120,10 +121,17 @@ def create_app(root: Path) -> FastAPI:
 
     @app.post("/api/jobs")
     async def upload(request: Request, video: UploadFile = File(...), subtitle: UploadFile | None = File(None),
-                     profile: str = Form("auto"), style: str = Form("professional"), model: str = Form("small"), glossary: str = Form("")):
+                     profile: str = Form("auto"), style: str = Form("professional"), model: str = Form("small"), glossary: str = Form(""),
+                     language: str = Form("auto"), script: str = Form("auto"), audio_content: str = Form("speech")):
         authenticate(request)
         if model not in {"tiny", "base", "small", "medium", "large-v3-turbo"}:
             raise HTTPException(400, "不支持的语音模型")
+        if language not in LANGUAGES or script not in {"auto", "original", "simplified"}:
+            raise HTTPException(400, "语言或中文字形选项无效")
+        if audio_content not in {"speech", "mixed"}:
+            raise HTTPException(400, "音轨内容选项无效")
+        if len(glossary) > MAX_TEXT_CHARS:
+            raise HTTPException(400, "术语表过长")
         suffix = Path(video.filename or "").suffix.lower()
         if suffix not in {".mp4", ".mov", ".mkv", ".webm", ".avi"}:
             raise HTTPException(400, "请选择 MP4、MOV、MKV、WebM 或 AVI 视频")
@@ -131,15 +139,35 @@ def create_app(root: Path) -> FastAPI:
         folder = output / job_id
         folder.mkdir()
         source = folder / ("source" + suffix)
-        await store_upload(video, source, 250 * 1024 * 1024)
+        await store_upload(video, source, MAX_VIDEO_BYTES)
         subtitle_text = None
         if subtitle and subtitle.filename:
-            await store_upload(subtitle, folder / "input.srt", 2 * 1024 * 1024)
+            await store_upload(subtitle, folder / "input.srt", MAX_TEXT_BYTES)
             subtitle_text = read_text(folder / "input.srt")
         jobs[job_id] = {"id": job_id, "name": (video.filename or "视频")[:120], "status": "queued", "progress": 0,
-                        "message": "等待处理", "created_at": time.time(), "demo": False}
+                        "message": "等待处理", "created_at": time.time(), "demo": False,
+                        "request": {"model": model, "settings": {"profile": profile, "style": style, "glossary": glossary,
+                                    "language": language, "script": script, "audio_content": audio_content}}}
         save_state(job_id)
-        pool.submit(process_job, job_id, source, {"profile": profile, "style": style, "glossary": glossary}, subtitle_text, model)
+        pool.submit(process_job, job_id, source, jobs[job_id]["request"]["settings"], subtitle_text, model)
+        return {"id": job_id}
+
+    @app.post("/api/jobs/{job_id}/retry")
+    def retry_job(job_id: str, request: Request):
+        authenticate(request)
+        with locks.setdefault(job_id, threading.Lock()):
+            current = state(job_id)
+            if current["status"] != "error" or not current.get("request"):
+                raise HTTPException(409, "仅可重试当前版本中处理失败的任务")
+            folder = directory(job_id)
+            source = next((p for p in folder.glob("source.*") if p.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".avi"}), None)
+            if source is None:
+                raise HTTPException(404, "原视频已不存在，请重新上传")
+            config = current["request"]
+            subtitle = read_text(folder / "input.srt") if (folder / "input.srt").is_file() else None
+            current.update(status="queued", progress=0, error=None, message="重试中，将复用已完成的识别片段")
+            save_state(job_id)
+            pool.submit(process_job, job_id, source, config["settings"], subtitle, config["model"])
         return {"id": job_id}
 
     @app.post("/api/demo")
