@@ -203,6 +203,8 @@ def recognition_issues(cue: dict, language: str | None) -> list[str]:
     issues = []
     if cue.get("boundary_review"):
         issues.append("分段边界补回识别词，请试听确认")
+    elif cue.get("background_recovered"):
+        issues.append("从未覆盖片段补识别的歌词，请试听确认")
     elif cue.get("recognition_review"):
         issues.append("部分识别词把握较低，请试听确认")
     if cue.get("no_speech_prob", 0) > 0.6 or cue.get("avg_logprob", 0) < -1:
@@ -220,7 +222,7 @@ def recognize_audio(path: Path, output: Path, model: str, cache: Path, language:
     target = output / "audio.wav"
     decode_audio(path, target)
     return recognize(target, model, cache, lambda value, message: progress(.15 + .65 * value, message),
-                     language=language, singing=singing, hints=hints, engine_factory=whisper_model)
+                     language=language, singing=singing, recover_gaps=singing, hints=hints, engine_factory=whisper_model)
 
 
 def process_lyrics(path: Path, output: Path, text: str, model: str, cache: Path,
@@ -242,7 +244,7 @@ def process_lyrics(path: Path, output: Path, text: str, model: str, cache: Path,
         from .profiles import load_terms
         hints = list(dict.fromkeys(term["text"] for term in load_terms("general", glossary)))[:64] if glossary.strip() else []
         words, cues, asr = recognize_audio(path, output, model, cache, language, progress, content == "song", hints)
-        if content == "speech":
+        if content == "speech" or any(w.get("background_recovered") for w in words):
             from .transcription import speech_cues
             cues = [{**row, "text": row["original"]}
                     for row in speech_cues(words, cues, metadata["duration"])]

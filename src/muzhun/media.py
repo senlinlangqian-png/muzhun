@@ -102,7 +102,7 @@ def whisper_model(name: str, cache: str):
 
 
 def transcribe(video: Path, metadata: dict, model: str, cache_dir: Path, progress, audio_path: Path,
-               hints: list[str] | None = None, language: str | None = None) -> tuple[list[dict], dict]:
+               hints: list[str] | None = None, language: str | None = None, content="speech") -> tuple[list[dict], dict]:
     if not metadata["has_audio"]:
         raise ValueError("视频没有音轨。请同时提供 SRT 字幕。")
     from .transcription import decode_audio, recognize, speech_cues
@@ -111,7 +111,8 @@ def transcribe(video: Path, metadata: dict, model: str, cache_dir: Path, progres
     def recognition_progress(value, message):
         progress(.56 + .25 * value, message)
     words, segments, info = recognize(audio_path, model, cache_dir, recognition_progress,
-        language=language, hints=hints, engine_factory=whisper_model)
+        language=language, hints=hints, engine_factory=whisper_model,
+        singing=content == "mixed", recover_gaps=content == "mixed")
     cues = speech_cues(words, segments, min(metadata["duration"], duration))
     if not cues:
         raise ValueError("没有识别到可用语音，请检查音轨或上传已有 SRT")

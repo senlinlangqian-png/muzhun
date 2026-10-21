@@ -22,9 +22,11 @@ The launcher finds MUZHUN_HOME first, then its install record, a containing sour
 
 ## Recognition and delivery decisions
 
-Video limits are 2 GB / 2 hours; audio is 512 MB / 2 hours. Longer inputs run in 5-minute owner windows with context overlap, real global time offsets, and reusable completed chunks. Retry an interrupted run in the same output directory; a new normal task should use a new directory. Do not overwrite a usable result to conceal failure.
+Video limits are 2 GB / 2 hours; audio is 512 MB / 2 hours. Longer inputs run in 25-second owner windows with up to 2 seconds of context on each side, real global time offsets, and reusable completed chunks. Retry an interrupted run in the same output directory; a new normal task should use a new directory. Do not overwrite a usable result to conceal failure.
 
 Small is the balanced default; Base is a quick CPU preview, and large-v3-turbo is a larger, slower option when requested. Set the known language and provide verified terminology when useful. Larger models and model word scores are not guarantees of accuracy. Speech uses VAD; songs do not silently discard singing with speech-only VAD. First use downloads the chosen model.
+
+If the user wants background singing included in a video, use `--audio-content mixed`. This isolates uncovered audio intervals for a second recognition pass and can compare locally detected languages when language is auto. Recovered cues are explicitly flagged for listening. Song audio does the same by default. This does not separate overlapping dialogue and vocals or caption nonverbal sound effects. Never complete a numeric sequence or missing lyrics from context; report uncertain model words, particularly clip edges, and preserve their real timestamps.
 
 Preserve raw wording and supplied text. Chinese ASR display defaults to simplified while retaining the original. Screen text supports a correction candidate but does not prove what was spoken. Keep uncertain changes pending, preserve identifiers and nicknames, and never replace missing lyric timings with evenly distributed guesses.
 

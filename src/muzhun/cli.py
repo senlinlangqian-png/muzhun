@@ -50,6 +50,8 @@ def main(argv=None) -> int:
         process_cmd.add_argument("--model", default="small", choices=["tiny", "base", "small", "medium", "large-v3-turbo"])
         process_cmd.add_argument("--language", default="auto", choices=["auto", "zh", "en", "ja", "ko", "es", "fr", "de", "ru"])
         process_cmd.add_argument("--script", default="auto", choices=["auto", "original", "simplified"])
+        process_cmd.add_argument("--audio-content", default="speech", choices=["speech", "mixed"],
+                                 help="speech 识别说话；mixed 同时尝试补识别空白片段中的背景歌词，须试听")
         process_cmd.add_argument("--synthetic-demo", action="store_true", help="明确标记合成演示素材，不计为真实评测")
     render = commands.add_parser("render", help="导出带字幕视频")
     render.add_argument("report", type=Path)
@@ -154,6 +156,7 @@ def main(argv=None) -> int:
             output = args.out.resolve()
             result = process(args.video.resolve(), output, {"profile": args.profile, "style": args.style,
                              "position_policy": args.position_policy, "language": args.language, "script": args.script,
+                             "audio_content": args.audio_content,
                              "glossary": read_text(args.glossary) if args.glossary else ""},
                              read_text(args.srt) if args.srt else None, args.model, cache, progress)
             result["source_video"] = str(args.video.resolve())

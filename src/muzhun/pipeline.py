@@ -28,6 +28,9 @@ def settings_check(settings: dict) -> dict:
     settings.setdefault("position_policy", "adaptive")
     if settings.get("language", "auto") not in LANGUAGES:
         raise ValueError("不支持的识别语言")
+    if settings.get("audio_content", "speech") not in {"speech", "mixed"}:
+        raise ValueError("音轨内容须为 speech 或 mixed")
+    settings.setdefault("audio_content", "speech")
     if settings.get("script", "auto") not in {"auto", "original", "simplified"}:
         raise ValueError("不支持的中文字形")
     for region in settings.get("regions", []):
@@ -143,7 +146,7 @@ def process(video: Path, job_dir: Path, settings: dict | None = None, srt: str |
         profile = detect_profile(screen_text, settings["profile"])
         terms = load_terms(profile["id"], settings.get("glossary", "")) + visible_terms(frames)
         hints = list(dict.fromkeys(term["text"] for term in terms if screen_evidence(term["text"], frames)))[:24]
-        cues, asr = transcribe(video, metadata, model, cache_dir or job_dir.parent / ".cache", progress, job_dir / "audio.wav", hints, None if settings.get("language", "auto") == "auto" else settings["language"])
+        cues, asr = transcribe(video, metadata, model, cache_dir or job_dir.parent / ".cache", progress, job_dir / "audio.wav", hints, None if settings.get("language", "auto") == "auto" else settings["language"], settings["audio_content"])
     # Reject mismatched SRT rather than silently truncating its timeline.
     if any(cue["end"] > metadata["duration"] + 0.1 for cue in cues):
         raise ValueError("字幕时间超过视频长度，请检查 SRT 是否对应此视频")

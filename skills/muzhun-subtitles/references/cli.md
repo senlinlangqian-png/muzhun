@@ -10,6 +10,8 @@ Gemini CLI uses ~/.gemini/skills, OpenCode uses ~/.config/opencode/skills, and K
 
 ## Audio / LRC
 
+For video dialogue plus background singing: `python scripts/run.py deliver VIDEO.mp4 --out OUTPUT --audio-content mixed --model small`. Ordinary dialogue keeps the default `--audio-content speech`. Mixed mode needs listening review and is not sound-effect detection or source separation.
+
 ~~~text
 python scripts/run.py lyrics AUDIO.mp3 --text LYRICS.txt --out OUTPUT --model small --language zh
 python scripts/run.py lyrics AUDIO.wav --out OUTPUT --model base

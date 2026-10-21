@@ -19,6 +19,7 @@ The UI runs locally. No transcription API key or domain is required. This is a s
 - Video up to **2 hours / 2 GB**; audio up to **2 hours / 512 MB**.
 - Short recognition chunks with overlap context, global timestamps and completed-chunk reuse after interruption.
 - Speech and song modes, language selection, technical vocabulary, and model quality options.
+- Video dialogue plus background vocals: select the mixed audio mode, or add `--audio-content mixed`. It retries uncovered intervals with locally detected languages and flags recovered cues for listening; it does not separate overlapping voices or caption nonverbal sounds.
 - Waveform seeking, line split/merge/delete, undo/redo, and range-limited lyric re-alignment using observed word anchors.
 - Local originals, evidence and human review state remain available. Unresolved timing is never filled by distributing lines evenly.
 - One setup command prepares both the Python engine and a selected Agent Skill.

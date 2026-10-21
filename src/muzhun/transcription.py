@@ -68,19 +68,88 @@ def _number(value, fallback=0.0):
         return fallback
 
 
+def uncovered_intervals(start, end, words, cues=(), minimum=1.2):
+    """Return real gaps, never infer missing words from a gap's length."""
+    intervals = sorted((max(start, w["start"]), min(end, w["end"]))
+                       for w in (words or cues) if w["end"] > start and w["start"] < end)
+    cursor = start
+    for lo, hi in intervals:
+        if lo - cursor >= minimum:
+            yield cursor, lo
+        cursor = max(cursor, hi)
+    if end - cursor >= minimum:
+        yield cursor, end
+
+
+def recover_uncovered(engine, wav, start, end, record, language, progress):
+    """Isolate missed music vocals from dominant dialogue; keep results reviewable.
+
+    This is not source separation. It cannot recover a second simultaneous
+    subtitle track. Up to two locally detected language candidates are decoded;
+    neither screen hotwords nor a requested lyric are used to fill gaps.
+    """
+    import numpy as np
+    recovered, evidence = [], []
+    for lo, hi in uncovered_intervals(start, end, record["words"], record["cues"]):
+        samples = pcm_window(wav, lo, hi)
+        if not len(samples) or float(np.sqrt(np.mean(samples ** 2))) < .003:
+            continue  # No extra decoding or hallucinated captions on silence.
+        progress(0, f"补识别未覆盖片段 {lo:.1f}–{hi:.1f} 秒")
+        def decode(chosen):
+            segments, info = engine.transcribe(samples, language=chosen, beam_size=5, temperature=0,
+                word_timestamps=True, condition_on_previous_text=False, vad_filter=False)
+            items, logprobs, silence = [], [], []
+            for segment in segments:
+                logprobs.append(_number(getattr(segment, "avg_logprob", -2), -2))
+                silence.append(_number(getattr(segment, "no_speech_prob", 1), 1))
+                for word in getattr(segment, "words", None) or []:
+                    a, b = max(lo, lo + _number(word.start)), min(hi, lo + _number(word.end))
+                    text = str(word.word)
+                    # Zero-length words at a clip edge are decoder guesses,
+                    # not usable timing anchors (e.g. an extra final number).
+                    if b - a >= .04 and text.strip():
+                        items.append({"word": text, "start": round(a, 3), "end": round(b, 3),
+                            "probability": round(_number(getattr(word, "probability", 0)), 4),
+                            "background_recovered": True, "language": info.language})
+            probabilities = [w["probability"] for w in items]
+            credible = sum(p >= .55 for p in probabilities)
+            average_log = sum(logprobs) / max(1, len(logprobs))
+            valid = (bool(items) and credible >= min(2, len(items)) and average_log >= -1.2
+                     and float(np.median(probabilities)) >= .55
+                     and not (min(silence or [1]) > .95 and np.mean(probabilities) < .85))
+            score = average_log + .25 * float(np.mean(probabilities)) if valid else -math.inf
+            return items, info, score
+        first, info, score = decode(language)
+        candidates = [(first, info.language, score)]
+        if language is None:
+            alternatives = sorted(getattr(info, "all_language_probs", None) or [], key=lambda item: -item[1])
+            alternate = next((code for code, prob in alternatives if code != info.language and prob >= .08), None)
+            if alternate:
+                other, other_info, other_score = decode(alternate)
+                candidates.append((other, other_info.language, other_score))
+        chosen, chosen_language, best_score = max(candidates, key=lambda item: item[2])
+        if math.isfinite(best_score):
+            recovered.extend(chosen)
+            evidence.append({"start": round(lo, 3), "end": round(hi, 3), "language": chosen_language,
+                "words": len(chosen), "needs_listening": True,
+                "candidate_languages": [code for _, code, _ in candidates]})
+    record["words"].extend({**w, "owner": True} for w in recovered)
+    record["recovery"] = evidence
+
+
 def recognize(wav: Path, model: str, cache: Path, progress, *, language=None,
-              singing=False, hints=None, engine_factory=None, chunk_seconds=CHUNK_SECONDS):
+              singing=False, recover_gaps=False, hints=None, engine_factory=None, chunk_seconds=CHUNK_SECONDS):
     from .media import whisper_model, write_json
     engine_factory = engine_factory or whisper_model
     with wave.open(str(wav), "rb") as audio:
         duration = audio.getnframes() / audio.getframerate()
-    options = {"schema": 3, "model": model, "language": language, "singing": singing, "temperature": 0,
+    options = {"schema": 4, "model": model, "language": language, "singing": singing, "recover_gaps": recover_gaps, "temperature": 0,
                "hints": hints or [], "chunk_seconds": chunk_seconds, "context": CONTEXT_SECONDS}
     signature = fingerprint(wav, options)
     folder = wav.parent / ".recognition" / signature
     folder.mkdir(parents=True, exist_ok=True)
     chunks = list(windows(duration, chunk_seconds))
-    words, cues, engine, used_cache, detected = [], [], None, 0, None
+    words, cues, recovery, engine, used_cache, detected = [], [], [], None, 0, None
     for index, start, end, read_start, read_end in chunks:
         stored = folder / f"{index:04d}.json"
         try:
@@ -130,12 +199,18 @@ def recognize(wav: Path, model: str, cache: Path, progress, *, language=None,
                     record["cues"].append({"text": text, "start": round(lo, 3), "end": round(hi, 3),
                         "no_speech_prob": _number(getattr(segment, "no_speech_prob", 0)),
                         "avg_logprob": _number(getattr(segment, "avg_logprob", 0))})
-                progress(min(1, (read_start + _number(segment.end)) / duration),
+                position = max(start, min(end, read_start + _number(segment.end)))
+                fraction = .8 if recover_gaps else 1
+                progress((start + fraction * (position - start)) / duration,
                          f"识别 {index + 1}/{len(chunks)} 段 · {min(end, read_start + _number(segment.end)):.0f}/{duration:.0f} 秒")
+            if recover_gaps:
+                recover_uncovered(engine, wav, start, end, record, language,
+                                  lambda _, message: progress((start + .8 * (end - start)) / duration, message))
             write_json(stored, record)
         detected = detected or record["language"]
         words.extend(record["words"])
         cues.extend(record["cues"])
+        recovery.extend(record.get("recovery", []))
         progress(end / duration, f"已完成 {index + 1}/{len(chunks)} 段" + (" · 复用已识别片段" if used_cache else ""))
     # Context windows can timestamp the same boundary word a little differently.
     def same_token(a, b):
@@ -177,7 +252,9 @@ def recognize(wav: Path, model: str, cache: Path, progress, *, language=None,
     return unique, cues, {"engine": "faster-whisper", "model": model, **(detected or {}),
         "word_timing": True, "vad_filter": not singing, "beam_size": 5, "temperature": 0,
         "chunks": len(chunks), "cached_chunks": used_cache, "chunk_seconds": chunk_seconds,
-        "context_seconds": CONTEXT_SECONDS, "screen_hotwords": hints or []}
+        "context_seconds": CONTEXT_SECONDS, "screen_hotwords": hints or [],
+        "recover_gaps": recover_gaps, "recovery": recovery,
+        "recovered_words": sum(bool(w.get("background_recovered")) for w in unique)}
 
 
 def speech_cues(words: list[dict], fallback: list[dict], duration: float) -> list[dict]:
@@ -191,7 +268,9 @@ def speech_cues(words: list[dict], fallback: list[dict], duration: float) -> lis
             probabilities = [w.get("probability", 1) for w in group]
             groups.append({"id": len(groups) + 1, "start": start, "end": end, "original": text,
                            "boundary_review": any(w.get("boundary_review") for w in group),
-                           "recognition_review": min(probabilities) < .45 or any(w.get("boundary_review") for w in group)})
+                           "background_recovered": any(w.get("background_recovered") for w in group),
+                           "recognition_review": min(probabilities) < .45 or any(
+                               w.get("boundary_review") or w.get("background_recovered") for w in group)})
         group.clear()
     def reading_length(text):
         # Latin identifiers are much narrower than Chinese glyphs. Counting
@@ -199,6 +278,8 @@ def speech_cues(words: list[dict], fallback: list[dict], duration: float) -> lis
         return sum(1 if '\u3400' <= char <= '\u9fff' else .55 for char in text)
 
     for index, word in enumerate(words):
+        if group and bool(word.get("background_recovered")) != bool(group[-1].get("background_recovered")):
+            flush()
         content = "".join(w["word"] for w in group)
         cjk = bool(re.search(r"[\u3400-\u9fff]", content + word["word"]))
         number_continues = bool(group and word["start"] - group[-1]["end"] <= .3

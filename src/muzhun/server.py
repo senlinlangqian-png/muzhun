@@ -122,12 +122,14 @@ def create_app(root: Path) -> FastAPI:
     @app.post("/api/jobs")
     async def upload(request: Request, video: UploadFile = File(...), subtitle: UploadFile | None = File(None),
                      profile: str = Form("auto"), style: str = Form("professional"), model: str = Form("small"), glossary: str = Form(""),
-                     language: str = Form("auto"), script: str = Form("auto")):
+                     language: str = Form("auto"), script: str = Form("auto"), audio_content: str = Form("speech")):
         authenticate(request)
         if model not in {"tiny", "base", "small", "medium", "large-v3-turbo"}:
             raise HTTPException(400, "不支持的语音模型")
         if language not in LANGUAGES or script not in {"auto", "original", "simplified"}:
             raise HTTPException(400, "语言或中文字形选项无效")
+        if audio_content not in {"speech", "mixed"}:
+            raise HTTPException(400, "音轨内容选项无效")
         if len(glossary) > MAX_TEXT_CHARS:
             raise HTTPException(400, "术语表过长")
         suffix = Path(video.filename or "").suffix.lower()
@@ -145,7 +147,7 @@ def create_app(root: Path) -> FastAPI:
         jobs[job_id] = {"id": job_id, "name": (video.filename or "视频")[:120], "status": "queued", "progress": 0,
                         "message": "等待处理", "created_at": time.time(), "demo": False,
                         "request": {"model": model, "settings": {"profile": profile, "style": style, "glossary": glossary,
-                                    "language": language, "script": script}}}
+                                    "language": language, "script": script, "audio_content": audio_content}}}
         save_state(job_id)
         pool.submit(process_job, job_id, source, jobs[job_id]["request"]["settings"], subtitle_text, model)
         return {"id": job_id}

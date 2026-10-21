@@ -43,3 +43,57 @@ jobs:
       - run: '"$VENV_PYTHON" -m unittest discover -s tests -v'
       - run: '"$VENV_PYTHON" -m muzhun.cli doctor --full'
       - run: '"$VENV_PYTHON" scripts/build_release.py'
+  release:
+    name: Publish a new version after all platform checks
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'senlinlangqian-png/muzhun'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: muzhun-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Check whether this version is already released
+        id: version
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "number=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release v$version already exists; leaving its files unchanged."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.version.outputs.exists == 'false'
+        run: python -m pip install PyYAML setuptools wheel
+      - if: steps.version.outputs.exists == 'false'
+        run: python scripts/build_release.py
+      - name: Publish checked source, Skill, wheel and checksums
+        if: steps.version.outputs.exists == 'false'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          notes="docs/release-${RELEASE_VERSION%.*}.md"
+          test -f "$notes"
+          gh release create "v$RELEASE_VERSION" \
+            "dist/muzhun-$RELEASE_VERSION-source.zip" \
+            "dist/muzhun-subtitles-skill-$RELEASE_VERSION.zip" \
+            "dist/muzhun-$RELEASE_VERSION-py3-none-any.whl" \
+            dist/SHA256SUMS.txt \
+            --target "$GITHUB_SHA" --latest \
+            --title "幕准 v$RELEASE_VERSION" --notes-file "$notes"

@@ -50,6 +50,7 @@ function renderCueList(){
 function renderInspector(){
   const cue=currentCue();if(!cue)return;
   $("selected-number").textContent="第 "+cue.id+" 条";$("original-text").textContent=cue.original;$("recognition-note").classList.toggle("hidden",!cue.recognition_review||cue.reviewed);
+  $("recognition-note").textContent=cue.background_recovered?"这句从未覆盖片段补识别，可能是背景歌词。请试听核对文字和起止。":"这句含低可靠识别词，请试听后核对。";
   $("edited-text").value=cue.text;$("edit-start").value=cue.start;$("edit-end").value=cue.end;
   const decisions=result.edits?.[String(cue.id)]?.decisions||{};
   $("proposal-list").innerHTML=cue.proposals.map((p,i)=>{
